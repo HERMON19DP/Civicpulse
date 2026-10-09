@@ -37,6 +37,27 @@ export interface CreatedComplaint {
   updatedAt: string;
 }
 
+export interface DuplicateCandidate {
+  complaintId: string;
+  description: string;
+  category: string;
+  status: string;
+  priority?: string | null;
+  latitude: number;
+  longitude: number;
+  createdAt: string;
+  similarity: number;
+  upvoteCount: number;
+  distanceMeters: number | null;
+  categoryMatch: boolean;
+}
+
+export interface DuplicateCheckResponse {
+  success: boolean;
+  hasPossibleDuplicates: boolean;
+  candidates: DuplicateCandidate[];
+}
+
 export interface CreateComplaintResponse {
   data: CreatedComplaint;
 }
@@ -88,6 +109,27 @@ export const api = {
     request<CreateComplaintResponse>("/complaints", {
       method: "POST",
       body: JSON.stringify(payload),
+    }),
+
+  checkDuplicates: (payload: {
+    description: string;
+    category: ComplaintCategory;
+    latitude: number;
+    longitude: number;
+  }) =>
+    request<DuplicateCheckResponse>("/intelligence/duplicate-check", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+
+  upvoteComplaint: (complaintId: string) =>
+    request<{
+      success: boolean;
+      created: boolean;
+      upvoteCount: number;
+      message: string;
+    }>(`/complaints/${encodeURIComponent(complaintId)}/upvote`, {
+      method: "POST",
     }),
 
   getMyComplaints: () =>

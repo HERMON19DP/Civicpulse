@@ -5,7 +5,7 @@ import type { ComplaintCategory } from "../types/complaint";
 import LocationPicker, {
   type SelectedLocation,
 } from "../components/LocationPicker";
-import { api } from "../api/client";
+import { api, type DuplicateCandidate } from "../api/client";
 
 const CATEGORY_OPTIONS: { value: ComplaintCategory; label: string }[] = [
   { value: "roads", label: "Roads & Potholes" },
@@ -16,7 +16,7 @@ const CATEGORY_OPTIONS: { value: ComplaintCategory; label: string }[] = [
   { value: "other", label: "Other" },
 ];
 
-type Step = "details" | "location" | "review" | "submitted";
+type Step = "details" | "location" | "review" | "duplicates" | "submitted";
 
 export default function ReportIssue() {
   const navigate = useNavigate();
@@ -38,6 +38,13 @@ export default function ReportIssue() {
 
   const [referenceId, setReferenceId] = useState("");
   const [submitError, setSubmitError] = useState("");
+
+  const [duplicateCandidates, setDuplicateCandidates] = useState<
+    DuplicateCandidate[]
+  >([]);
+  const [checkingDuplicates, setCheckingDuplicates] = useState(false);
+  const [upvotingId, setUpvotingId] = useState<string | null>(null);
+  const [duplicateError, setDuplicateError] = useState("");
 
   useEffect(() => {
     if (
@@ -81,16 +88,52 @@ export default function ReportIssue() {
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
 
-    if (submitting) return;
+    if (submitting || checkingDuplicates) return;
 
-    if (!selectedLocation) {
-      setSubmitError("Please select the complaint location on the map.");
-      setStep("location");
+    if (!selectedLocation || !category) {
+      setSubmitError("Select a category and complaint location.");
       return;
     }
 
-    if (!title.trim() || !category || !description.trim() || !address.trim()) {
+    if (!title.trim() || !description.trim() || !address.trim()) {
       setSubmitError("Please complete all required complaint fields.");
+      return;
+    }
+
+    setCheckingDuplicates(true);
+    setSubmitError("");
+    setDuplicateError("");
+
+    try {
+      const result = await api.checkDuplicates({
+        description: description.trim(),
+        category,
+        latitude: selectedLocation.latitude,
+        longitude: selectedLocation.longitude,
+      });
+
+      if (result.hasPossibleDuplicates && result.candidates.length > 0) {
+        setDuplicateCandidates(result.candidates);
+        setStep("duplicates");
+        return;
+      }
+
+      await registerComplaint();
+    } catch (error) {
+      setSubmitError(
+        error instanceof Error
+          ? error.message
+          : "Unable to check for duplicate complaints.",
+      );
+    } finally {
+      setCheckingDuplicates(false);
+    }
+  }
+
+  async function registerComplaint() {
+    if (!selectedLocation || !category) {
+      setSubmitError("Select a category and complaint location.");
+      setStep("location");
       return;
     }
 
@@ -98,11 +141,6 @@ export default function ReportIssue() {
     setSubmitError("");
 
     try {
-      if (!selectedLocation || !category) {
-        setSubmitError("Select a category and complaint location.");
-        return;
-      }
-
       const result = await api.createComplaint({
         title: title.trim(),
         description: description.trim(),
@@ -122,6 +160,26 @@ export default function ReportIssue() {
       );
     } finally {
       setSubmitting(false);
+    }
+  }
+
+  async function handleUpvote(candidate: DuplicateCandidate) {
+    if (upvotingId) return;
+
+    setUpvotingId(candidate.complaintId);
+    setDuplicateError("");
+
+    try {
+      await api.upvoteComplaint(candidate.complaintId);
+      navigate("/complaints");
+    } catch (error) {
+      setDuplicateError(
+        error instanceof Error
+          ? error.message
+          : "Unable to upvote this complaint. Please try again.",
+      );
+    } finally {
+      setUpvotingId(null);
     }
   }
 
@@ -422,15 +480,103 @@ export default function ReportIssue() {
             >
               Back
             </button>
+
             <button
               type="submit"
-              disabled={submitting}
+              disabled={submitting || checkingDuplicates}
               className="ios-btn-primary flex-1 py-3 text-sm font-semibold text-white shadow-md disabled:opacity-60 cursor-pointer"
             >
-              {submitting ? "Submitting…" : "Submit Report"}
+              {checkingDuplicates
+                ? "Checking for duplicates..."
+                : submitting
+                  ? "Submitting..."
+                  : "Check & Submit Report"}
             </button>
           </div>
         </form>
+      )}
+
+      {step === "duplicates" && (
+        <div className="glass-panel flex flex-col gap-5 p-6 sm:p-7 shadow-ios-glass">
+          <div>
+            <h2 className="text-xl font-bold text-ink">
+              Similar complaints already exist
+            </h2>
+            <p className="mt-2 text-sm text-ink-soft">
+              Check whether one of these reports describes the same issue. You
+              can support an existing complaint or continue with a new report.
+            </p>
+          </div>
+
+          {duplicateError && (
+            <p
+              role="alert"
+              className="rounded-xl bg-rose-500/10 p-3 text-sm text-rose-700"
+            >
+              {duplicateError}
+            </p>
+          )}
+
+          <div className="flex flex-col gap-3">
+            {duplicateCandidates.map((candidate) => (
+              <article
+                key={candidate.complaintId}
+                className="rounded-2xl border border-white/70 bg-white/50 p-4"
+              >
+                <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+                  <span className="text-xs font-semibold text-ink-soft">
+                    {candidate.category}
+                  </span>
+                  <span className="rounded-full bg-blue-50 px-2.5 py-1 text-xs font-semibold text-blue-700">
+                    {Math.round(candidate.similarity * 100)}% text similarity
+                  </span>
+                </div>
+
+                <p className="text-sm font-semibold text-ink">
+                  {candidate.description}
+                </p>
+
+                <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-ink-soft">
+                  <span>Status: {candidate.status.replace(/_/g, " ")}</span>
+                  {candidate.distanceMeters != null && (
+                    <span>{Math.round(candidate.distanceMeters)} m away</span>
+                  )}
+                  <span>{candidate.upvoteCount} upvotes</span>
+                </div>
+
+                <button
+                  type="button"
+                  disabled={upvotingId !== null}
+                  onClick={() => void handleUpvote(candidate)}
+                  className="ios-btn-primary mt-4 w-full py-2.5 text-sm font-semibold text-white disabled:opacity-60"
+                >
+                  {upvotingId === candidate.complaintId
+                    ? "Upvoting..."
+                    : "Upvote this complaint"}
+                </button>
+              </article>
+            ))}
+          </div>
+
+          <div className="flex flex-col gap-3 border-t border-white/50 pt-4 sm:flex-row">
+            <button
+              type="button"
+              onClick={() => setStep("review")}
+              className="flex-1 rounded-xl border border-white/70 bg-white/60 py-3 text-sm font-semibold text-ink"
+            >
+              Back to review
+            </button>
+
+            <button
+              type="button"
+              disabled={submitting}
+              onClick={() => void registerComplaint()}
+              className="ios-btn-primary flex-1 py-3 text-sm font-semibold text-white disabled:opacity-60"
+            >
+              {submitting ? "Submitting..." : "Submit as new complaint"}
+            </button>
+          </div>
+        </div>
       )}
     </div>
   );
