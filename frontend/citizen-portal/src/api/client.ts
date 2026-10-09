@@ -1,11 +1,22 @@
-import type { Complaint, CitizenProfile } from "../types/complaint";
+import type {
+  Complaint,
+  CitizenProfile,
+  ComplaintCategory,
+} from "../types/complaint";
 
 const BASE_URL = import.meta.env.VITE_API_URL ?? "http://localhost:5000/api/v1";
+
+export interface AuthUser {
+  id: string;
+  name: string;
+  email: string;
+  role: "CITIZEN" | "OFFICER" | "ADMIN" | string;
+}
 
 export interface CreateComplaintPayload {
   title: string;
   description: string;
-  category: string;
+  category: ComplaintCategory;
   address: string;
   latitude: number;
   longitude: number;
@@ -56,14 +67,22 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
 }
 
 export const api = {
+  register: (payload: { name: string; email: string; password: string }) =>
+    request<{ data: AuthUser }>("/auth/register", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+
   login: (email: string, password: string) =>
-    request<{ data: { accessToken: string; user: CitizenProfile } }>(
-      "/auth/login",
-      {
-        method: "POST",
-        body: JSON.stringify({ email, password }),
-      },
-    ),
+    request<{
+      data: {
+        accessToken: string;
+        user: AuthUser;
+      };
+    }>("/auth/login", {
+      method: "POST",
+      body: JSON.stringify({ email, password }),
+    }),
 
   createComplaint: (payload: CreateComplaintPayload) =>
     request<CreateComplaintResponse>("/complaints", {
@@ -71,20 +90,21 @@ export const api = {
       body: JSON.stringify(payload),
     }),
 
-  getMyComplaints: () => request<{ data: Complaint[] }>("/complaints/mine"),
+  getMyComplaints: () =>
+    request<{ data: CreatedComplaint[] }>("/complaints/mine"),
 
   getComplaint: (id: string) =>
-    request<{ data: Complaint }>(`/complaints/${id}`),
+    request<{ data: CreatedComplaint }>(`/complaints/${id}`),
 
   getNearbyComplaints: (lat: number, lng: number) =>
     request<{ data: Complaint[] }>(
       `/complaints/nearby?lat=${encodeURIComponent(lat)}&lng=${encodeURIComponent(lng)}`,
     ),
 
-  getProfile: () => request<{ data: CitizenProfile }>("/citizens/me"),
+  getProfile: () => request<{ data: CitizenProfile }>("/users/me"),
 
   updateProfile: (payload: Partial<CitizenProfile>) =>
-    request<{ data: CitizenProfile }>("/citizens/me", {
+    request<{ data: CitizenProfile }>("/users/me", {
       method: "PATCH",
       body: JSON.stringify(payload),
     }),

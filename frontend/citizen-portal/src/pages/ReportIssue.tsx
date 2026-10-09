@@ -1,12 +1,6 @@
 import { useState, useEffect, type FormEvent } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import {
-  MapPin,
-  UploadSimple,
-  CheckCircle,
-  Warning,
-  X,
-} from "@phosphor-icons/react";
+import { UploadSimple, CheckCircle, Warning, X } from "@phosphor-icons/react";
 import type { ComplaintCategory } from "../types/complaint";
 import LocationPicker, {
   type SelectedLocation,
@@ -87,17 +81,35 @@ export default function ReportIssue() {
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
 
+    if (submitting) return;
+
+    if (!selectedLocation) {
+      setSubmitError("Please select the complaint location on the map.");
+      setStep("location");
+      return;
+    }
+
+    if (!title.trim() || !category || !description.trim() || !address.trim()) {
+      setSubmitError("Please complete all required complaint fields.");
+      return;
+    }
+
     setSubmitting(true);
     setSubmitError("");
 
     try {
+      if (!selectedLocation || !category) {
+        setSubmitError("Select a category and complaint location.");
+        return;
+      }
+
       const result = await api.createComplaint({
         title: title.trim(),
         description: description.trim(),
         category,
         address: address.trim(),
-        latitude,
-        longitude,
+        latitude: selectedLocation.latitude,
+        longitude: selectedLocation.longitude,
       });
 
       setReferenceId(result.data.referenceId);
@@ -128,8 +140,10 @@ export default function ReportIssue() {
         <h1 className="text-2xl font-extrabold text-ink">Report submitted</h1>
         <p className="text-sm text-ink-soft">
           Your complaint has been logged and assigned reference{" "}
-          <span className="font-mono font-bold text-primary">#CP-10482</span>.
-          You'll get updates as it progresses.
+          <span className="font-mono font-bold text-primary">
+            #{referenceId}
+          </span>
+          . You'll get updates as it progresses.
         </p>
         <div className="mt-3 flex gap-3">
           <button
@@ -390,6 +404,15 @@ export default function ReportIssue() {
             Submitting a false or misleading report may result in your account
             being restricted.
           </div>
+
+          {submitError && (
+            <p
+              role="alert"
+              className="rounded-xl bg-rose-500/10 p-3 text-sm font-medium text-rose-700"
+            >
+              {submitError}
+            </p>
+          )}
 
           <div className="flex gap-3">
             <button

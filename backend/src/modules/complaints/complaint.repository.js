@@ -65,6 +65,31 @@ async function findComplaintById(id) {
   return result.rows[0] || null;
 }
 
+async function findComplaintsByCitizenId(citizenId) {
+  const result = await pool.query(
+    `SELECT
+       id,
+       reference_id,
+       citizen_id,
+       title,
+       description,
+       category,
+       address,
+       status,
+       priority,
+       latitude,
+       longitude,
+       created_at,
+       updated_at
+     FROM complaints
+     WHERE citizen_id = $1
+     ORDER BY created_at DESC`,
+    [citizenId],
+  );
+
+  return result.rows;
+}
+
 async function updateComplaintStatus(id, status) {
   const result = await pool.query(
     `UPDATE complaints
@@ -105,6 +130,7 @@ async function complaintExists(id) {
 module.exports = {
   createComplaint,
   findComplaintById,
+  findComplaintsByCitizenId,
   updateComplaintStatus,
   complaintExists,
 };

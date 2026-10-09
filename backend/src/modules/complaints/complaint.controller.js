@@ -40,7 +40,19 @@ async function getComplaintById(req, res, next) {
     );
 
     return res.status(200).json({
-      data: complaint,
+      data: toComplaintResponse(complaint),
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
+async function getMyComplaints(req, res, next) {
+  try {
+    const complaints = await complaintService.getMyComplaints(req.user.id);
+
+    return res.status(200).json({
+      data: complaints.map(toComplaintResponse),
     });
   } catch (error) {
     next(error);
@@ -65,5 +77,6 @@ async function updateComplaintStatus(req, res, next) {
 module.exports = {
   createComplaint,
   getComplaintById,
+  getMyComplaints,
   updateComplaintStatus,
 };

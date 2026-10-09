@@ -10,6 +10,7 @@ const authorizeAny = require("../../middleware/authorizeAny");
 const {
   createComplaint,
   getComplaintById,
+  getMyComplaints,
   updateComplaintStatus,
 } = require("./complaint.controller");
 
@@ -31,6 +32,8 @@ router.post(
 );
 
 router.post("/:complaintId/upvote", authenticate, upvote);
+
+router.get("/mine", authenticate, getMyComplaints);
 
 router.get(
   "/:id",

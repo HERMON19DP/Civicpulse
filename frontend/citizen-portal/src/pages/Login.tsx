@@ -26,7 +26,7 @@ export default function Login() {
   }, [accountCreated]);
 
   // Determine officer dashboard URL based on environment
-  const officerDashboardUrl = `http://${window.location.hostname}:5174/officer?token=demo-token`;
+  // const officerDashboardUrl = `http://${window.location.hostname}:5174/officer?token=demo-token`;
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();

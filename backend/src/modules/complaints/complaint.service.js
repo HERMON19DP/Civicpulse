@@ -80,6 +80,10 @@ async function getComplaintById(id, user) {
   return complaint;
 }
 
+async function getMyComplaints(citizenId) {
+  return complaintRepository.findComplaintsByCitizenId(citizenId);
+}
+
 async function updateComplaintStatus(id, newStatus) {
   const complaint = await complaintRepository.findComplaintById(id);
 
@@ -105,5 +109,6 @@ async function updateComplaintStatus(id, newStatus) {
 module.exports = {
   createComplaint,
   getComplaintById,
+  getMyComplaints,
   updateComplaintStatus,
 };
