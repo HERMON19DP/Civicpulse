@@ -1,6 +1,15 @@
 import { useState, type FormEvent } from "react";
 import { useNavigate, Link } from "react-router-dom";
-import { User, Envelope, Phone, MapPinLine, LockKey, Warning, Bell } from "@phosphor-icons/react";
+import {
+  User,
+  Envelope,
+  Phone,
+  MapPinLine,
+  LockKey,
+  Warning,
+  Bell,
+} from "@phosphor-icons/react";
+import { api } from "../api/client";
 
 export default function Signup() {
   const navigate = useNavigate();
@@ -23,46 +32,48 @@ export default function Signup() {
       setError("Please enter your full name.");
       return;
     }
+
     if (!email.trim() || !email.includes("@")) {
       setError("Please enter a valid email address.");
       return;
     }
-    if (!phone.trim()) {
-      setError("Please enter your phone number.");
+
+    if (password.length < 8) {
+      setError("Password must be at least 8 characters.");
       return;
     }
-    if (!ward.trim()) {
-      setError("Please specify your ward or locality.");
-      return;
-    }
-    if (!password || password.length < 6) {
-      setError("Password must be at least 6 characters.");
-      return;
-    }
+
     if (password !== confirmPassword) {
       setError("Passwords do not match.");
       return;
     }
 
     setLoading(true);
+
     try {
-      // Simulate API registration delay
-      await new Promise((r) => setTimeout(r, 600));
+      await api.register({
+        name: name.trim(),
+        email: email.trim(),
+        password,
+      });
 
-      // Save credentials & citizen profile to localStorage
-      localStorage.setItem("cp_citizen_token", "demo-token");
-      const profile = {
-        name,
-        email,
-        phone,
-        ward,
-        notificationPrefs: { email: emailNotifs, sms: smsNotifs },
-      };
-      localStorage.setItem("cp_citizen_profile", JSON.stringify(profile));
+      // Registration does not return an access token.
+      // The user signs in separately after account creation.
+      localStorage.removeItem("cp_citizen_token");
+      localStorage.removeItem("cp_citizen_profile");
 
-      navigate("/");
-    } catch {
-      setError("Unable to create account. Please check your information and try again.");
+      navigate("/login", {
+        replace: true,
+        state: {
+          accountCreated: true,
+        },
+      });
+    } catch (err) {
+      setError(
+        err instanceof Error
+          ? err.message
+          : "Unable to create your account. Please try again.",
+      );
     } finally {
       setLoading(false);
     }
@@ -77,9 +88,12 @@ export default function Signup() {
             CP
           </div>
           <div>
-            <h1 className="text-2xl font-bold tracking-tight text-ink font-display">Create Citizen Account</h1>
+            <h1 className="text-2xl font-bold tracking-tight text-ink font-display">
+              Create Citizen Account
+            </h1>
             <p className="mt-0.5 text-xs text-ink-soft">
-              Register with your local ward details to submit grievances and track resolutions.
+              Register with your local ward details to submit grievances and
+              track resolutions.
             </p>
           </div>
         </div>
@@ -95,7 +109,11 @@ export default function Signup() {
               role="alert"
               className="flex items-start gap-2.5 rounded-xl border border-rose-500/30 bg-rose-500/15 p-3 text-xs font-medium text-rose-800 backdrop-blur-md"
             >
-              <Warning size={17} className="mt-0.5 shrink-0 text-rose-600" weight="fill" />
+              <Warning
+                size={17}
+                className="mt-0.5 shrink-0 text-rose-600"
+                weight="fill"
+              />
               <span>{error}</span>
             </div>
           )}
@@ -103,7 +121,10 @@ export default function Signup() {
           <div className="grid gap-4 sm:grid-cols-2">
             {/* Full Name */}
             <div className="flex flex-col gap-1.5 sm:col-span-2">
-              <label htmlFor="name" className="text-xs font-semibold text-ink flex items-center gap-1.5">
+              <label
+                htmlFor="name"
+                className="text-xs font-semibold text-ink flex items-center gap-1.5"
+              >
                 <User size={15} className="text-primary" weight="duotone" />
                 Full Name
               </label>
@@ -120,7 +141,10 @@ export default function Signup() {
 
             {/* Email Address */}
             <div className="flex flex-col gap-1.5">
-              <label htmlFor="email" className="text-xs font-semibold text-ink flex items-center gap-1.5">
+              <label
+                htmlFor="email"
+                className="text-xs font-semibold text-ink flex items-center gap-1.5"
+              >
                 <Envelope size={15} className="text-primary" weight="duotone" />
                 Email Address
               </label>
@@ -137,7 +161,10 @@ export default function Signup() {
 
             {/* Phone Number */}
             <div className="flex flex-col gap-1.5">
-              <label htmlFor="phone" className="text-xs font-semibold text-ink flex items-center gap-1.5">
+              <label
+                htmlFor="phone"
+                className="text-xs font-semibold text-ink flex items-center gap-1.5"
+              >
                 <Phone size={15} className="text-primary" weight="duotone" />
                 Phone Number
               </label>
@@ -154,8 +181,15 @@ export default function Signup() {
 
             {/* Ward / Area Locality */}
             <div className="flex flex-col gap-1.5 sm:col-span-2">
-              <label htmlFor="ward" className="text-xs font-semibold text-ink flex items-center gap-1.5">
-                <MapPinLine size={15} className="text-primary" weight="duotone" />
+              <label
+                htmlFor="ward"
+                className="text-xs font-semibold text-ink flex items-center gap-1.5"
+              >
+                <MapPinLine
+                  size={15}
+                  className="text-primary"
+                  weight="duotone"
+                />
                 Ward / Registered Locality
               </label>
               <input
@@ -170,7 +204,10 @@ export default function Signup() {
 
             {/* Password */}
             <div className="flex flex-col gap-1.5">
-              <label htmlFor="password" className="text-xs font-semibold text-ink flex items-center gap-1.5">
+              <label
+                htmlFor="password"
+                className="text-xs font-semibold text-ink flex items-center gap-1.5"
+              >
                 <LockKey size={15} className="text-primary" weight="duotone" />
                 Password
               </label>
@@ -187,7 +224,10 @@ export default function Signup() {
 
             {/* Confirm Password */}
             <div className="flex flex-col gap-1.5">
-              <label htmlFor="confirmPassword" className="text-xs font-semibold text-ink flex items-center gap-1.5">
+              <label
+                htmlFor="confirmPassword"
+                className="text-xs font-semibold text-ink flex items-center gap-1.5"
+              >
                 <LockKey size={15} className="text-primary" weight="duotone" />
                 Confirm Password
               </label>
@@ -206,7 +246,8 @@ export default function Signup() {
           {/* Inset Notification Preferences */}
           <div className="pt-2 border-t border-white/40">
             <span className="mb-2.5 flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-ink">
-              <Bell size={15} className="text-primary" weight="duotone" /> Notification Preferences
+              <Bell size={15} className="text-primary" weight="duotone" />{" "}
+              Notification Preferences
             </span>
             <div className="flex flex-col gap-2 rounded-ios-xl border border-white/50 bg-white/30 p-3.5 backdrop-blur-sm">
               <label className="flex cursor-pointer items-center justify-between gap-3 text-xs font-medium text-ink">
@@ -242,7 +283,10 @@ export default function Signup() {
 
         <p className="mt-6 text-center text-sm text-ink-soft">
           Already have an account?{" "}
-          <Link to="/login" className="font-semibold text-primary hover:underline">
+          <Link
+            to="/login"
+            className="font-semibold text-primary hover:underline"
+          >
             Sign in
           </Link>
         </p>

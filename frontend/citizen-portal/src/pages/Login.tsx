@@ -1,6 +1,14 @@
-import { useState, type FormEvent } from "react";
-import { useNavigate, Link } from "react-router-dom";
-import { Envelope, LockKey, Warning, User, ShieldCheck } from "@phosphor-icons/react";
+import { useState, useEffect, type FormEvent } from "react";
+import { useNavigate, Link, useLocation } from "react-router-dom";
+import {
+  Envelope,
+  LockKey,
+  Warning,
+  User,
+  ShieldCheck,
+  CheckCircle,
+} from "@phosphor-icons/react";
+import { api } from "../api/client";
 
 export default function Login() {
   const navigate = useNavigate();
@@ -9,6 +17,13 @@ export default function Login() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const location = useLocation();
+  const accountCreated = location.state?.accountCreated === true;
+  useEffect(() => {
+    if (accountCreated) {
+      window.history.replaceState({}, document.title, window.location.pathname);
+    }
+  }, [accountCreated]);
 
   // Determine officer dashboard URL based on environment
   const officerDashboardUrl = `http://${window.location.hostname}:5174/officer?token=demo-token`;
@@ -17,25 +32,40 @@ export default function Login() {
     e.preventDefault();
     setError(null);
 
-    if (!email || !password) {
+    if (!email.trim() || !password) {
       setError("Enter both your email and password to continue.");
       return;
     }
 
-    setLoading(true);
-    try {
-      await new Promise((r) => setTimeout(r, 600));
+    if (role === "officer") {
+      setError(
+        "Officer sign-in will be connected in the officer integration step.",
+      );
+      return;
+    }
 
-      if (role === "citizen") {
-        localStorage.setItem("cp_citizen_token", "demo-token");
-        navigate("/");
-      } else {
-        localStorage.setItem("cp_officer_token", "demo-token");
-        // Redirect to officer dashboard on port 5174
-        window.location.href = officerDashboardUrl;
+    setLoading(true);
+
+    try {
+      const response = await api.login(email.trim(), password);
+      const { accessToken, user } = response.data;
+
+      if (user.role !== "CITIZEN") {
+        throw new Error(
+          "This account is not authorized for the citizen portal.",
+        );
       }
-    } catch {
-      setError("We couldn't sign you in. Check your details and try again.");
+
+      localStorage.setItem("cp_citizen_token", accessToken);
+      localStorage.setItem("cp_citizen_profile", JSON.stringify(user));
+
+      navigate("/");
+    } catch (err) {
+      setError(
+        err instanceof Error
+          ? err.message
+          : "We couldn't sign you in. Please try again.",
+      );
     } finally {
       setLoading(false);
     }
@@ -44,6 +74,30 @@ export default function Login() {
   return (
     <div className="flex min-h-[100dvh] items-center justify-center px-4 py-8">
       <div className="w-full max-w-sm">
+        {accountCreated && (
+          <div
+            role="status"
+            aria-live="polite"
+            className="mb-5 flex items-start gap-3 rounded-2xl border border-emerald-200 bg-emerald-50/90 p-4 text-emerald-900 shadow-sm backdrop-blur-md"
+          >
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-emerald-100">
+              <CheckCircle
+                size={21}
+                weight="fill"
+                className="text-emerald-600"
+              />
+            </div>
+
+            <div>
+              <p className="text-sm font-bold">Account created successfully!</p>
+              <p className="mt-1 text-xs leading-relaxed text-emerald-800">
+                Your CivicPulse account is ready. Sign in with your registered
+                email and password to continue.
+              </p>
+            </div>
+          </div>
+        )}
+
         {/* iOS Segmented Role Switcher: Citizen vs Officer */}
         <div className="glass-pill mb-6 inline-flex w-full rounded-full p-1 border border-white/60 bg-white/40 shadow-sm backdrop-blur-md">
           <button
@@ -73,7 +127,10 @@ export default function Login() {
                 : "text-ink-soft hover:text-ink hover:bg-white/40"
             }`}
           >
-            <ShieldCheck size={16} weight={role === "officer" ? "fill" : "regular"} />
+            <ShieldCheck
+              size={16}
+              weight={role === "officer" ? "fill" : "regular"}
+            />
             <span>Officer Console</span>
           </button>
         </div>
@@ -106,17 +163,26 @@ export default function Login() {
               role="alert"
               className="mb-4 flex items-start gap-2.5 rounded-xl border border-rose-500/30 bg-rose-500/15 p-3 text-xs font-medium text-rose-800 backdrop-blur-md"
             >
-              <Warning size={17} className="mt-0.5 shrink-0 text-rose-600" weight="fill" />
+              <Warning
+                size={17}
+                className="mt-0.5 shrink-0 text-rose-600"
+                weight="fill"
+              />
               <span>{error}</span>
             </div>
           )}
 
           <div className="mb-4 flex flex-col gap-1.5">
             <label htmlFor="email" className="text-xs font-semibold text-ink">
-              {role === "citizen" ? "Email address" : "Official departmental email"}
+              {role === "citizen"
+                ? "Email address"
+                : "Official departmental email"}
             </label>
             <div className="relative">
-              <Envelope size={18} className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-ink-soft" />
+              <Envelope
+                size={18}
+                className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-ink-soft"
+              />
               <input
                 id="email"
                 type="email"
@@ -124,17 +190,25 @@ export default function Login() {
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 className="glass-input w-full py-2.5 pl-10 pr-3.5 text-sm"
-                placeholder={role === "citizen" ? "you@example.com" : "officer@city.gov.in"}
+                placeholder={
+                  role === "citizen" ? "you@example.com" : "officer@city.gov.in"
+                }
               />
             </div>
           </div>
 
           <div className="mb-2 flex flex-col gap-1.5">
-            <label htmlFor="password" className="text-xs font-semibold text-ink">
+            <label
+              htmlFor="password"
+              className="text-xs font-semibold text-ink"
+            >
               Password
             </label>
             <div className="relative">
-              <LockKey size={18} className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-ink-soft" />
+              <LockKey
+                size={18}
+                className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-ink-soft"
+              />
               <input
                 id="password"
                 type="password"
@@ -149,7 +223,10 @@ export default function Login() {
 
           {role === "citizen" && (
             <div className="mb-5 flex justify-end">
-              <Link to="/forgot-password" className="text-xs font-semibold text-primary hover:underline">
+              <Link
+                to="/forgot-password"
+                className="text-xs font-semibold text-primary hover:underline"
+              >
                 Forgot password?
               </Link>
             </div>
@@ -165,15 +242,18 @@ export default function Login() {
             {loading
               ? "Signing in…"
               : role === "citizen"
-              ? "Sign in as Citizen"
-              : "Sign in as Officer"}
+                ? "Sign in as Citizen"
+                : "Sign in as Officer"}
           </button>
         </form>
 
         {role === "citizen" && (
           <p className="mt-6 text-center text-sm text-ink-soft">
             New to CivicPulse?{" "}
-            <Link to="/signup" className="font-semibold text-primary hover:underline">
+            <Link
+              to="/signup"
+              className="font-semibold text-primary hover:underline"
+            >
               Create an account
             </Link>
           </p>

@@ -1,13 +1,17 @@
 const { z } = require("zod");
 
 const createComplaintSchema = z.object({
-  description: z.string().min(10).max(5000),
+  title: z.string().trim().min(3).max(200),
 
-  category: z.string().max(50).optional(),
+  description: z.string().trim().min(10).max(5000),
 
-  latitude: z.number().min(-90).max(90).optional(),
+  category: z.string().trim().min(1).max(50),
 
-  longitude: z.number().min(-180).max(180).optional(),
+  address: z.string().trim().min(1).max(500),
+
+  latitude: z.number().min(-90).max(90),
+
+  longitude: z.number().min(-180).max(180),
 });
 
 const updateComplaintStatusSchema = z.object({
