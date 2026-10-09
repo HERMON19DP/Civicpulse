@@ -1,6 +1,4 @@
-const {
-  complaintExists,
-} = require("./complaint.repository");
+const { findComplaintById } = require("./complaint.repository");
 
 const {
   createUpvote,
@@ -8,10 +6,18 @@ const {
 } = require("../../repositories/complaint-upvote.repository");
 
 async function upvoteComplaint({ complaintId, userId }) {
-  const exists = await complaintExists(complaintId);
+  const complaint = await findComplaintById(complaintId);
 
-  if (!exists) {
+  if (!complaint) {
     return null;
+  }
+
+  // Citizens cannot upvote their own complaints.
+  if (String(complaint.citizen_id) === String(userId)) {
+    const error = new Error("You cannot upvote your own complaint");
+    error.statusCode = 403;
+    error.code = "CANNOT_UPVOTE_OWN_COMPLAINT";
+    throw error;
   }
 
   const upvote = await createUpvote({
