@@ -12,6 +12,7 @@ const {
   getComplaintById,
   getMyComplaints,
   updateComplaintStatus,
+  getAllComplaints,
 } = require("./complaint.controller");
 
 const {
@@ -22,6 +23,13 @@ const {
 const { upvote } = require("./upvote.controller");
 
 const router = express.Router();
+
+router.get(
+  "/",
+  authenticate,
+  authorize(PERMISSIONS.COMPLAINT_READ_DEPARTMENT),
+  getAllComplaints,
+);
 
 router.post(
   "/",

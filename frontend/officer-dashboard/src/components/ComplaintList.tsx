@@ -10,8 +10,12 @@ export function ComplaintList({ complaints }: { complaints: Complaint[] }) {
         <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-slate-100/80 text-ink-soft shadow-inner">
           <MapPin size={22} weight="duotone" />
         </div>
-        <p className="text-sm font-semibold text-ink">No complaints match these filters</p>
-        <p className="text-xs text-ink-soft">Try widening your search or clearing filters.</p>
+        <p className="text-sm font-semibold text-ink">
+          No complaints match these filters
+        </p>
+        <p className="text-xs text-ink-soft">
+          Try widening your search or clearing filters.
+        </p>
       </div>
     );
   }
@@ -41,7 +45,7 @@ export function ComplaintList({ complaints }: { complaints: Complaint[] }) {
                     to={`/officer/complaints/${c.id}`}
                     className="inline-flex items-center rounded-md bg-primary-soft/50 px-2 py-0.5 font-mono text-xs font-semibold text-primary transition-all group-hover:bg-primary-soft"
                   >
-                    #{c.id}
+                    #{c.referenceId ?? c.id}
                   </Link>
                 </td>
                 <td className="px-5 py-3.5">
@@ -54,7 +58,12 @@ export function ComplaintList({ complaints }: { complaints: Complaint[] }) {
                 </td>
                 <td className="px-5 py-3.5 text-ink-soft">
                   <span className="inline-flex items-center gap-1.5 text-xs">
-                    <MapPin size={14} className="shrink-0 text-primary/70" weight="fill" /> {c.location.ward}
+                    <MapPin
+                      size={14}
+                      className="shrink-0 text-primary/70"
+                      weight="fill"
+                    />{" "}
+                    {c.location.address || "Address not provided"}
                   </span>
                 </td>
                 <td className="px-5 py-3.5">

@@ -59,6 +59,22 @@ async function getMyComplaints(req, res, next) {
   }
 }
 
+async function getAllComplaints(req, res, next) {
+  try {
+    const complaints = await complaintService.getAllComplaints({
+      status: req.query.status,
+      category: req.query.category,
+      query: req.query.query,
+    });
+
+    return res.status(200).json({
+      data: complaints.map(toComplaintResponse),
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
 async function updateComplaintStatus(req, res, next) {
   try {
     const complaint = await complaintService.updateComplaintStatus(
@@ -79,4 +95,5 @@ module.exports = {
   getComplaintById,
   getMyComplaints,
   updateComplaintStatus,
+  getAllComplaints,
 };

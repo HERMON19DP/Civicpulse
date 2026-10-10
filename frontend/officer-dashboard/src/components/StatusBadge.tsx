@@ -1,6 +1,9 @@
 import type { ComplaintStatus, ComplaintPriority } from "../types/complaint";
 
-const STATUS_CONFIG: Record<ComplaintStatus, { label: string; text: string; bg: string; border: string; glow: string }> = {
+const STATUS_CONFIG: Record<
+  ComplaintStatus,
+  { label: string; text: string; bg: string; border: string; glow: string }
+> = {
   open: {
     label: "Open",
     text: "text-amber-800",
@@ -32,18 +35,25 @@ const STATUS_CONFIG: Record<ComplaintStatus, { label: string; text: string; bg: 
 };
 
 export function StatusBadge({ status }: { status: ComplaintStatus }) {
-  const cfg = STATUS_CONFIG[status];
+  const cfg = STATUS_CONFIG[status] ?? STATUS_CONFIG.open;
+
   return (
     <span
       className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-semibold backdrop-blur-md border ${cfg.bg} ${cfg.text} ${cfg.border} shadow-[inset_0_1px_0.5px_rgba(255,255,255,0.7)]`}
     >
-      <span className={`h-1.5 w-1.5 rounded-full ${cfg.glow}`} aria-hidden="true" />
+      <span
+        className={`h-1.5 w-1.5 rounded-full ${cfg.glow}`}
+        aria-hidden="true"
+      />
       {cfg.label}
     </span>
   );
 }
 
-const PRIORITY_CONFIG: Record<ComplaintPriority, { label: string; text: string; bg: string; border: string }> = {
+const PRIORITY_CONFIG: Record<
+  ComplaintPriority,
+  { label: string; text: string; bg: string; border: string }
+> = {
   low: {
     label: "Low",
     text: "text-slate-600",
@@ -71,7 +81,8 @@ const PRIORITY_CONFIG: Record<ComplaintPriority, { label: string; text: string; 
 };
 
 export function PriorityTag({ priority }: { priority: ComplaintPriority }) {
-  const cfg = PRIORITY_CONFIG[priority];
+  const cfg = PRIORITY_CONFIG[priority] ?? PRIORITY_CONFIG.medium;
+
   return (
     <span
       className={`inline-flex items-center rounded-lg px-2 py-0.5 text-[11px] font-semibold backdrop-blur-md border ${cfg.bg} ${cfg.text} ${cfg.border} shadow-[inset_0_1px_0.5px_rgba(255,255,255,0.7)]`}
@@ -80,4 +91,3 @@ export function PriorityTag({ priority }: { priority: ComplaintPriority }) {
     </span>
   );
 }
-

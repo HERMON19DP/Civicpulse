@@ -44,6 +44,7 @@ export interface Complaint {
   evidence: EvidenceFile[];
   timeline: TimelineEvent[];
   assignedOfficer?: string;
+  referenceId?: string;
 }
 
 export interface Officer {

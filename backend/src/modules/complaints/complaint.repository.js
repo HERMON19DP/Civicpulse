@@ -116,6 +116,56 @@ async function updateComplaintStatus(id, status) {
   return result.rows[0] || null;
 }
 
+async function findAllComplaints({ status, category, query } = {}) {
+  const conditions = [];
+  const values = [];
+
+  if (status) {
+    values.push(status);
+    conditions.push(`status = $${values.length}`);
+  }
+
+  if (category) {
+    values.push(category);
+    conditions.push(`category = $${values.length}`);
+  }
+
+  if (query) {
+    values.push(`%${query}%`);
+    const index = values.length;
+    conditions.push(
+      `(title ILIKE $${index} OR description ILIKE $${index} OR reference_id ILIKE $${index})`,
+    );
+  }
+
+  const whereClause = conditions.length
+    ? `WHERE ${conditions.join(" AND ")}`
+    : "";
+
+  const result = await pool.query(
+    `SELECT
+       id,
+       reference_id,
+       citizen_id,
+       title,
+       description,
+       category,
+       address,
+       status,
+       priority,
+       latitude,
+       longitude,
+       created_at,
+       updated_at
+     FROM complaints
+     ${whereClause}
+     ORDER BY created_at DESC`,
+    values,
+  );
+
+  return result.rows;
+}
+
 async function complaintExists(id) {
   const result = await pool.query(
     `SELECT 1
@@ -133,4 +183,5 @@ module.exports = {
   findComplaintsByCitizenId,
   updateComplaintStatus,
   complaintExists,
+  findAllComplaints,
 };

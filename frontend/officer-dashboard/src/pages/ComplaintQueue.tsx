@@ -1,18 +1,17 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { MagnifyingGlass } from "@phosphor-icons/react";
 import { ComplaintList } from "../components/ComplaintList";
-import type { Complaint, ComplaintStatus, ComplaintCategory } from "../types/complaint";
+import { api } from "../api/client";
+import type {
+  Complaint,
+  ComplaintStatus,
+  ComplaintCategory,
+} from "../types/complaint";
 
-// TODO: replace with api.getQueue({ status, category, query })
-const MOCK_QUEUE: Complaint[] = [
-  { id: "CP-10482", title: "Large pothole near bus stop", description: "", category: "roads", status: "in_progress", priority: "high", createdAt: "", updatedAt: "2026-09-09T09:00:00Z", citizenName: "Aditi Rao", location: { address: "4th Cross Rd", ward: "Ward 12", lat: 0, lng: 0 }, evidence: [], timeline: [], assignedOfficer: "You" },
-  { id: "CP-10501", title: "Water pipeline leak flooding road", description: "", category: "water_supply", status: "open", priority: "urgent", createdAt: "", updatedAt: "2026-09-09T08:15:00Z", citizenName: "Vikram Shah", location: { address: "Lakeview Colony", ward: "Ward 12", lat: 0, lng: 0 }, evidence: [], timeline: [] },
-  { id: "CP-10476", title: "Broken streetlight, school zone", description: "", category: "electricity", status: "open", priority: "medium", createdAt: "", updatedAt: "2026-09-08T17:40:00Z", citizenName: "Meena Iyer", location: { address: "Govt. School Rd", ward: "Ward 12", lat: 0, lng: 0 }, evidence: [], timeline: [] },
-  { id: "CP-10391", title: "Streetlight outage on Park Ave", description: "", category: "electricity", status: "resolved", priority: "low", createdAt: "", updatedAt: "2026-08-27T11:00:00Z", citizenName: "Rahul Verma", location: { address: "Park Avenue", ward: "Ward 12", lat: 0, lng: 0 }, evidence: [], timeline: [] },
-  { id: "CP-10312", title: "Garbage not collected for 5 days", description: "", category: "sanitation", status: "rejected", priority: "low", createdAt: "", updatedAt: "2026-08-19T09:00:00Z", citizenName: "Farhan Ali", location: { address: "5th Main Rd", ward: "Ward 12", lat: 0, lng: 0 }, evidence: [], timeline: [] },
-];
-
-const STATUS_FILTERS: { key: ComplaintStatus | "all"; label: string }[] = [
+const STATUS_FILTERS: {
+  key: ComplaintStatus | "all";
+  label: string;
+}[] = [
   { key: "all", label: "All" },
   { key: "open", label: "Open" },
   { key: "in_progress", label: "In Progress" },
@@ -20,7 +19,10 @@ const STATUS_FILTERS: { key: ComplaintStatus | "all"; label: string }[] = [
   { key: "rejected", label: "Rejected" },
 ];
 
-const CATEGORY_FILTERS: { key: ComplaintCategory | "all"; label: string }[] = [
+const CATEGORY_FILTERS: {
+  key: ComplaintCategory | "all";
+  label: string;
+}[] = [
   { key: "all", label: "All categories" },
   { key: "roads", label: "Roads" },
   { key: "water_supply", label: "Water Supply" },
@@ -34,55 +36,91 @@ export default function ComplaintQueue() {
   const [status, setStatus] = useState<ComplaintStatus | "all">("all");
   const [category, setCategory] = useState<ComplaintCategory | "all">("all");
   const [query, setQuery] = useState("");
+  const [complaints, setComplaints] = useState<Complaint[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  const filtered = MOCK_QUEUE.filter((c) => {
-    const matchStatus = status === "all" || c.status === status;
-    const matchCategory = category === "all" || c.category === category;
-    const q = query.toLowerCase();
-    const matchQuery = !q || c.title.toLowerCase().includes(q) || c.id.toLowerCase().includes(q) || c.citizenName.toLowerCase().includes(q);
-    return matchStatus && matchCategory && matchQuery;
-  });
+  useEffect(() => {
+    let cancelled = false;
+
+    const timer = window.setTimeout(
+      async () => {
+        setLoading(true);
+        setError(null);
+
+        try {
+          const results = await api.getQueue({
+            status,
+            category,
+            query,
+          });
+
+          if (!cancelled) {
+            setComplaints(results);
+          }
+        } catch (err) {
+          if (!cancelled) {
+            setError(
+              err instanceof Error ? err.message : "Unable to load complaints.",
+            );
+          }
+        } finally {
+          if (!cancelled) {
+            setLoading(false);
+          }
+        }
+      },
+      query.trim() ? 300 : 0,
+    );
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [status, category, query]);
 
   return (
     <div className="flex flex-col gap-5">
-      {/* Header */}
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <span className="text-[11px] font-semibold uppercase tracking-wider text-blue-600">Queue Management</span>
-          <h1 className="text-2xl font-bold tracking-tight text-ink">Complaint Queue</h1>
+          <span className="text-[11px] font-semibold uppercase tracking-wider text-blue-600">
+            Queue Management
+          </span>
+          <h1 className="text-2xl font-bold tracking-tight text-ink">
+            Complaint Queue
+          </h1>
         </div>
+
         <span className="inline-flex items-center gap-1.5 self-start rounded-full border border-white/70 bg-white/50 px-3 py-1 text-xs font-semibold text-ink-soft shadow-[inset_0_1px_1px_rgba(255,255,255,0.8)] backdrop-blur-md sm:self-auto">
           <span className="h-1.5 w-1.5 rounded-full bg-blue-600" />
-          {filtered.length} of {MOCK_QUEUE.length} complaints
+          {loading ? "Loading complaints…" : `${complaints.length} complaints`}
         </span>
       </div>
 
-      {/* iOS Segmented Control for Statuses */}
       <div className="overflow-x-auto pb-1">
-        <div className="inline-flex min-w-full sm:min-w-0 items-center rounded-2xl border border-white/70 bg-black/[0.04] p-1.5 shadow-[inset_0_1px_2px_rgba(0,0,0,0.04)] backdrop-blur-xl">
-          {STATUS_FILTERS.map((f) => {
-            const isActive = status === f.key;
+        <div className="inline-flex min-w-full items-center rounded-2xl border border-white/70 bg-black/[0.04] p-1.5 shadow-[inset_0_1px_2px_rgba(0,0,0,0.04)] backdrop-blur-xl sm:min-w-0">
+          {STATUS_FILTERS.map((filter) => {
+            const isActive = status === filter.key;
+
             return (
               <button
-                key={f.key}
+                key={filter.key}
                 type="button"
-                onClick={() => setStatus(f.key)}
-                className={`flex-1 sm:flex-initial rounded-xl px-4 py-1.5 text-xs font-semibold transition-all duration-200 whitespace-nowrap ${
+                onClick={() => setStatus(filter.key)}
+                className={`flex-1 whitespace-nowrap rounded-xl px-4 py-1.5 text-xs font-semibold transition-all duration-200 sm:flex-initial ${
                   isActive
-                    ? "bg-white text-ink shadow-[0_2px_8px_rgba(0,0,0,0.08),inset_0_1px_1px_rgba(255,255,255,0.9)] scale-[1.02]"
-                    : "text-ink-soft hover:text-ink hover:bg-white/30"
+                    ? "scale-[1.02] bg-white text-ink shadow-[0_2px_8px_rgba(0,0,0,0.08),inset_0_1px_1px_rgba(255,255,255,0.9)]"
+                    : "text-ink-soft hover:bg-white/30 hover:text-ink"
                 }`}
               >
-                {f.label}
+                {filter.label}
               </button>
             );
           })}
         </div>
       </div>
 
-      {/* Search & Category Filter Controls */}
       <div className="glass-panel flex flex-col gap-3 p-3.5 sm:flex-row sm:items-center">
-        {/* Spotlight-style Search */}
         <div className="relative flex-1">
           <MagnifyingGlass
             size={17}
@@ -92,30 +130,71 @@ export default function ComplaintQueue() {
           <input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search by ID, title, or citizen name"
+            placeholder="Search by reference ID, title, or description"
             className="glass-input w-full py-2.5 pl-10 pr-4 text-sm"
             aria-label="Search complaints"
           />
         </div>
 
-        {/* Category Dropdown */}
         <div className="flex items-center gap-2">
           <select
             value={category}
-            onChange={(e) => setCategory(e.target.value as ComplaintCategory | "all")}
+            onChange={(e) =>
+              setCategory(e.target.value as ComplaintCategory | "all")
+            }
             className="glass-input px-3.5 py-2.5 text-sm font-medium"
             aria-label="Filter by category"
           >
-            {CATEGORY_FILTERS.map((f) => (
-              <option key={f.key} value={f.key}>
-                {f.label}
+            {CATEGORY_FILTERS.map((filter) => (
+              <option key={filter.key} value={filter.key}>
+                {filter.label}
               </option>
             ))}
           </select>
         </div>
       </div>
 
-      <ComplaintList complaints={filtered} />
+      {error && (
+        <div
+          role="alert"
+          className="glass-panel flex flex-col gap-3 border border-rose-500/30 p-4 text-sm text-rose-800"
+        >
+          <p className="font-semibold">Couldn't load the complaint queue.</p>
+          <p>{error}</p>
+          <button
+            type="button"
+            onClick={() => {
+              setError(null);
+              setLoading(true);
+              api
+                .getQueue({ status, category, query })
+                .then(setComplaints)
+                .catch((err: unknown) => {
+                  setError(
+                    err instanceof Error
+                      ? err.message
+                      : "Unable to load complaints.",
+                  );
+                })
+                .finally(() => setLoading(false));
+            }}
+            className="self-start rounded-lg border border-white/70 bg-white/60 px-3 py-1.5 text-xs font-semibold text-ink"
+          >
+            Retry
+          </button>
+        </div>
+      )}
+
+      {loading ? (
+        <div
+          role="status"
+          className="glass-panel px-6 py-14 text-center text-sm text-ink-soft"
+        >
+          Loading complaints from CivicPulse…
+        </div>
+      ) : !error ? (
+        <ComplaintList complaints={complaints} />
+      ) : null}
     </div>
   );
 }

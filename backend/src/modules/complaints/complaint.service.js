@@ -84,6 +84,10 @@ async function getMyComplaints(citizenId) {
   return complaintRepository.findComplaintsByCitizenId(citizenId);
 }
 
+async function getAllComplaints(filters) {
+  return complaintRepository.findAllComplaints(filters);
+}
+
 async function updateComplaintStatus(id, newStatus) {
   const complaint = await complaintRepository.findComplaintById(id);
 
@@ -111,4 +115,5 @@ module.exports = {
   getComplaintById,
   getMyComplaints,
   updateComplaintStatus,
+  getAllComplaints,
 };
