@@ -6,7 +6,7 @@ const NAV_ITEMS = [
   { to: "/", label: "Home", icon: House, end: true },
   { to: "/report", label: "Report Issue", icon: FileText, end: false },
   { to: "/complaints", label: "My Complaints", icon: ClipboardText, end: false },
-  { to: "/map", label: "Civic Map", icon: MapPin, end: false },
+  // { to: "/map", label: "Civic Map", icon: MapPin, end: false },
   { to: "/profile", label: "Profile", icon: User, end: false },
 ];
 

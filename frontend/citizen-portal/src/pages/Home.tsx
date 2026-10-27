@@ -45,7 +45,7 @@ export default function Home() {
             </div>
           </div>
 
-          <div className="rounded-2xl border border-white/60 bg-white/40 p-5 backdrop-blur-md shadow-[inset_0_1px_1px_rgba(255,255,255,0.7)]">
+          {/* <div className="rounded-2xl border border-white/60 bg-white/40 p-5 backdrop-blur-md shadow-[inset_0_1px_1px_rgba(255,255,255,0.7)]">
             <div className="mb-3 flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <span className="h-2 w-2 rounded-full bg-blue-600" />
@@ -73,7 +73,7 @@ export default function Home() {
                 </li>
               ))}
             </ul>
-          </div>
+          </div> */}
         </div>
       </section>
 

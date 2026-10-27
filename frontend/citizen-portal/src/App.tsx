@@ -43,7 +43,7 @@ export default function App() {
           <Route path="/report" element={<ReportIssue />} />
           <Route path="/complaints" element={<MyComplaints />} />
           <Route path="/complaints/:id" element={<ComplaintDetails />} />
-          <Route path="/map" element={<CivicMap />} />
+          {/* <Route path="/map" element={<CivicMap />} /> */}
           <Route path="/profile" element={<Profile />} />
         </Route>
 

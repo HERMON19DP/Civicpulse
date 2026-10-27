@@ -54,3 +54,11 @@ export interface Officer {
   department: string;
   ward: string;
 }
+
+export interface CurrentUserProfile {
+  id: string;
+  name: string;
+  email: string;
+  role: "CITIZEN" | "OFFICER" | "ADMIN" | string;
+  created_at: string;
+}
