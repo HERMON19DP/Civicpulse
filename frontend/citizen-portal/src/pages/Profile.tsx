@@ -1,172 +1,202 @@
-import { useState, type FormEvent } from "react";
-import { User, Envelope, Phone, MapPinLine, Bell, CheckCircle, SignOut, ShieldCheck } from "@phosphor-icons/react";
-import type { CitizenProfile } from "../types/complaint";
-
-// TODO: replace with api.getProfile() via useEffect
-const MOCK_PROFILE: CitizenProfile = {
-  id: "u1",
-  name: "Aditi Rao",
-  email: "aditi.rao@example.com",
-  phone: "+91 98765 43210",
-  ward: "Ward 12 — Banjara Hills",
-  notificationPrefs: { email: true, sms: false },
-};
+import { useEffect, useState } from "react";
+import {
+  User,
+  Envelope,
+  CalendarBlank,
+  ShieldCheck,
+  SignOut,
+  IdentificationCard,
+  ArrowClockwise,
+} from "@phosphor-icons/react";
+import { api } from "../api/client";
+import type { CurrentUserProfile } from "../types/complaint";
 
 export default function Profile() {
-  const [profile, setProfile] = useState<CitizenProfile>(MOCK_PROFILE);
-  const [saved, setSaved] = useState(false);
+  const [profile, setProfile] = useState<CurrentUserProfile | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
 
-  function handleSubmit(e: FormEvent) {
-    e.preventDefault();
-    // TODO: call api.updateProfile(profile)
-    setSaved(true);
-    setTimeout(() => setSaved(false), 2500);
+  async function loadProfile() {
+    setLoading(true);
+    setError("");
+
+    try {
+      const response = await api.getProfile();
+      setProfile(response.data as CurrentUserProfile);
+    } catch (err) {
+      setError(
+        err instanceof Error ? err.message : "Unable to load your profile.",
+      );
+    } finally {
+      setLoading(false);
+    }
   }
+
+  useEffect(() => {
+    void loadProfile();
+  }, []);
 
   function handleLogout() {
     localStorage.removeItem("cp_citizen_token");
     window.location.href = "/login";
   }
 
+  if (loading) {
+    return (
+      <div className="glass-panel mx-auto max-w-xl rounded-ios-2xl p-8 text-center">
+        <div className="mx-auto mb-3 h-8 w-8 animate-spin rounded-full border-2 border-blue-200 border-t-blue-600" />
+        <p className="text-sm font-medium text-ink-soft">
+          Loading your profile...
+        </p>
+      </div>
+    );
+  }
+
+  if (error || !profile) {
+    return (
+      <div className="glass-panel mx-auto max-w-xl space-y-4 rounded-ios-2xl p-6">
+        <h1 className="text-xl font-bold text-ink">Unable to load profile</h1>
+        <p className="text-sm text-rose-700">
+          {error || "Your profile could not be found."}
+        </p>
+        <button
+          type="button"
+          onClick={() => void loadProfile()}
+          className="ios-btn-primary flex items-center justify-center gap-2 rounded-ios-xl px-4 py-3 text-sm font-bold text-white"
+        >
+          <ArrowClockwise size={18} />
+          Try again
+        </button>
+      </div>
+    );
+  }
+
+  const initials =
+    profile.name
+      .trim()
+      .split(/\s+/)
+      .filter(Boolean)
+      .map((part) => part[0])
+      .join("")
+      .slice(0, 2)
+      .toUpperCase() || "C";
+
+  const registeredDate = profile.created_at
+    ? new Date(profile.created_at).toLocaleDateString(undefined, {
+        day: "numeric",
+        month: "long",
+        year: "numeric",
+      })
+    : "Not available";
+
   return (
     <div className="mx-auto max-w-xl space-y-6">
-      {/* Apple ID Style Profile Card Header */}
-      <div className="glass-panel flex items-center gap-4 rounded-ios-2xl p-5 border border-white/70 shadow-ios-glass">
-        <div className="relative flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-blue-500 to-indigo-600 text-xl font-bold text-white shadow-[0_4px_16px_rgba(37,99,235,0.4),inset_0_1px_1.5px_rgba(255,255,255,0.7)] ring-4 ring-white/60">
-          {profile.name.split(" ").map((n) => n[0]).join("")}
+      <div className="glass-panel flex items-center gap-4 rounded-ios-2xl border border-white/70 p-5 shadow-ios-glass">
+        <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-blue-500 to-indigo-600 text-xl font-bold text-white shadow-[0_4px_16px_rgba(37,99,235,0.4),inset_0_1px_1.5px_rgba(255,255,255,0.7)] ring-4 ring-white/60">
+          {initials}
         </div>
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2">
-            <h1 className="text-xl font-bold tracking-tight text-ink font-display truncate">
+
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-2">
+            <h1 className="truncate font-display text-xl font-bold tracking-tight text-ink">
               {profile.name}
             </h1>
-            <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/15 border border-emerald-400/30 px-2 py-0.5 text-[10px] font-bold text-emerald-800 backdrop-blur-sm">
-              <ShieldCheck size={12} weight="fill" className="text-emerald-600" />
-              Verified
+            <span className="inline-flex items-center gap-1 rounded-full border border-emerald-400/30 bg-emerald-500/15 px-2 py-0.5 text-[10px] font-bold text-emerald-800">
+              <ShieldCheck size={12} weight="fill" />
+              Account active
             </span>
           </div>
-          <p className="text-xs font-semibold text-ink-soft mt-0.5 truncate">{profile.ward}</p>
+          <p className="mt-1 truncate text-xs font-semibold text-ink-soft">
+            {profile.email}
+          </p>
         </div>
       </div>
 
-      {/* Main Settings Form */}
-      <form onSubmit={handleSubmit} className="glass-panel flex flex-col gap-5 rounded-ios-2xl border border-white/70 p-6 sm:p-7 shadow-ios-glass">
-        {saved && (
-          <div className="flex items-center gap-2 rounded-ios-xl border border-emerald-400/40 bg-emerald-500/15 px-3.5 py-2.5 text-xs font-semibold text-emerald-800 backdrop-blur-md shadow-sm">
-            <CheckCircle size={18} weight="fill" className="text-emerald-600 shrink-0" />
-            <span>Profile and notification preferences successfully saved.</span>
-          </div>
-        )}
-
-        <div className="space-y-4">
-          <Field label="Full Name" icon={User}>
-            <input
-              value={profile.name}
-              onChange={(e) => setProfile({ ...profile, name: e.target.value })}
-              className="glass-input w-full rounded-ios-xl px-3.5 py-2.5 text-xs sm:text-sm font-medium text-ink focus:outline-none"
-            />
-          </Field>
-
-          <Field label="Email Address" icon={Envelope}>
-            <input
-              type="email"
-              value={profile.email}
-              onChange={(e) => setProfile({ ...profile, email: e.target.value })}
-              className="glass-input w-full rounded-ios-xl px-3.5 py-2.5 text-xs sm:text-sm font-medium text-ink focus:outline-none"
-            />
-          </Field>
-
-          <Field label="Phone Number" icon={Phone}>
-            <input
-              type="tel"
-              value={profile.phone}
-              onChange={(e) => setProfile({ ...profile, phone: e.target.value })}
-              className="glass-input w-full rounded-ios-xl px-3.5 py-2.5 text-xs sm:text-sm font-medium text-ink focus:outline-none"
-            />
-          </Field>
-
-          <Field label="Ward / Registered Locality" icon={MapPinLine}>
-            <input
-              value={profile.ward ?? ""}
-              onChange={(e) => setProfile({ ...profile, ward: e.target.value })}
-              className="glass-input w-full rounded-ios-xl px-3.5 py-2.5 text-xs sm:text-sm font-medium text-ink focus:outline-none"
-            />
-          </Field>
+      <section className="glass-panel space-y-5 rounded-ios-2xl border border-white/70 p-6 shadow-ios-glass sm:p-7">
+        <div>
+          <h2 className="text-base font-bold text-ink">Account information</h2>
+          <p className="mt-1 text-xs text-ink-soft">
+            Your registered details. Contact support if anything needs to be
+            corrected.
+          </p>
         </div>
 
-        {/* Inset Notifications Section */}
-        <div className="border-t border-white/40 pt-5">
-          <span className="mb-3 flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-ink">
-            <Bell size={16} className="text-primary" weight="duotone" /> Notification Channels
-          </span>
-          <div className="flex flex-col gap-2 rounded-ios-xl border border-white/50 bg-white/30 p-3.5 backdrop-blur-sm">
-            <Toggle
-              label="Email updates on my complaints"
-              checked={profile.notificationPrefs.email}
-              onChange={(v) =>
-                setProfile({ ...profile, notificationPrefs: { ...profile.notificationPrefs, email: v } })
-              }
-            />
-            <div className="h-px bg-white/40 w-full" />
-            <Toggle
-              label="SMS alerts for critical status changes"
-              checked={profile.notificationPrefs.sms}
-              onChange={(v) =>
-                setProfile({ ...profile, notificationPrefs: { ...profile.notificationPrefs, sms: v } })
-              }
-            />
-          </div>
-        </div>
+        <ReadOnlyField
+          label="Full name"
+          value={profile.name}
+          icon={<User size={17} weight="duotone" />}
+        />
 
-        <button
-          type="submit"
-          className="ios-btn-primary mt-2 rounded-ios-xl py-3 text-xs sm:text-sm font-bold text-white shadow-md cursor-pointer transition-all active:scale-[0.99]"
-        >
-          Save Changes
-        </button>
-      </form>
+        <ReadOnlyField
+          label="Email address"
+          value={profile.email}
+          icon={<Envelope size={17} weight="duotone" />}
+        />
 
-      {/* Frosted Destructive Sign Out Button */}
-      <button
-        onClick={handleLogout}
-        className="flex w-full items-center justify-center gap-2 rounded-ios-xl border border-rose-300/50 bg-rose-500/10 py-3 text-xs font-bold text-rose-700 backdrop-blur-md transition-all hover:bg-rose-500/20 active:scale-[0.99] shadow-sm cursor-pointer"
-      >
-        <SignOut size={16} weight="bold" /> Sign Out from Citizen Portal
-      </button>
-    </div>
-  );
-}
+        <ReadOnlyField
+          label="Account role"
+          value={profile.role}
+          icon={<IdentificationCard size={17} weight="duotone" />}
+        />
 
-function Field({ label, icon: Icon, children }: { label: string; icon: React.ElementType; children: React.ReactNode }) {
-  return (
-    <div className="flex flex-col gap-1.5">
-      <label className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-ink-soft">
-        <Icon size={14} className="text-primary shrink-0" weight="duotone" /> {label}
-      </label>
-      {children}
-    </div>
-  );
-}
+        {/* <ReadOnlyField
+          label="Account ID"
+          value={profile.id}
+          icon={<ShieldCheck size={17} weight="duotone" />}
+          monospace
+        /> */}
 
-function Toggle({ label, checked, onChange }: { label: string; checked: boolean; onChange: (v: boolean) => void }) {
-  return (
-    <label className="flex cursor-pointer items-center justify-between gap-3 py-1">
-      <span className="text-xs sm:text-sm font-semibold text-ink">{label}</span>
+        <ReadOnlyField
+          label="Member since"
+          value={registeredDate}
+          icon={<CalendarBlank size={17} weight="duotone" />}
+        />
+      </section>
+
+      <div className="rounded-ios-xl border border-blue-200/60 bg-blue-500/5 p-4">
+        <p className="text-xs leading-relaxed text-ink-soft">
+          Your account details are read-only in CivicPulse. This helps keep your
+          identity consistent with the account used to register and track civic
+          complaints.
+        </p>
+      </div>
+
       <button
         type="button"
-        role="switch"
-        aria-checked={checked}
-        onClick={() => onChange(!checked)}
-        className={`relative h-6 w-11 shrink-0 rounded-full transition-colors duration-200 focus:outline-none shadow-inner ${
-          checked ? "bg-primary" : "bg-slate-300/80"
+        onClick={handleLogout}
+        className="flex w-full items-center justify-center gap-2 rounded-ios-xl border border-rose-300/50 bg-rose-500/10 py-3 text-xs font-bold text-rose-700 shadow-sm transition-all hover:bg-rose-500/20 active:scale-[0.99]"
+      >
+        <SignOut size={16} weight="bold" />
+        Sign Out from Citizen Portal
+      </button>
+    </div>
+  );
+}
+
+function ReadOnlyField({
+  label,
+  value,
+  icon,
+  monospace = false,
+}: {
+  label: string;
+  value: string;
+  icon: React.ReactNode;
+  monospace?: boolean;
+}) {
+  return (
+    <div className="space-y-1.5">
+      <label className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-ink-soft">
+        <span className="text-primary">{icon}</span>
+        {label}
+      </label>
+      <div
+        className={`glass-input flex min-h-11 items-center rounded-ios-xl px-3.5 py-2.5 text-sm font-medium text-ink ${
+          monospace ? "break-all font-mono text-xs" : "break-words"
         }`}
       >
-        <span
-          className={`absolute top-0.5 h-5 w-5 rounded-full bg-white shadow-md transition-transform duration-200 ${
-            checked ? "translate-x-5" : "translate-x-0.5"
-          }`}
-        />
-      </button>
-    </label>
+        {value || "Not available"}
+      </div>
+    </div>
   );
 }
