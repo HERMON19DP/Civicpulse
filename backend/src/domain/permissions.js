@@ -10,6 +10,8 @@ const PERMISSIONS = {
   COPILOT_QUERY: "copilot:query",
   RECOMMENDATION_DECIDE: "recommendation:decide",
   AUDIT_READ: "audit:read",
+
+  SPATIAL_ANALYZE: "spatial:analyze",
 };
 
 module.exports = PERMISSIONS;

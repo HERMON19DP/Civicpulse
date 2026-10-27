@@ -11,30 +11,36 @@ async function createComplaint({
   db = pool,
 }) {
   const result = await db.query(
-    `INSERT INTO complaints (
-       citizen_id,
-       title,
-       description,
-       category,
-       address,
-       latitude,
-       longitude
-     )
-     VALUES ($1, $2, $3, $4, $5, $6, $7)
-     RETURNING
-       id,
-       reference_id,
-       citizen_id,
-       title,
-       description,
-       category,
-       address,
-       status,
-       priority,
-       latitude,
-       longitude,
-       created_at,
-       updated_at`,
+    `
+INSERT INTO complaints (
+  citizen_id,
+  title,
+  description,
+  category,
+  address,
+  latitude,
+  longitude,
+  location
+)
+VALUES (
+  $1, $2, $3, $4, $5, $6, $7,
+  ST_SetSRID(ST_MakePoint($7, $6), 4326)::geography
+)
+RETURNING
+  id,
+  reference_id,
+  citizen_id,
+  title,
+  description,
+  category,
+  address,
+  status,
+  priority,
+  latitude,
+  longitude,
+  created_at,
+  updated_at
+`,
     [citizenId, title, description, category, address, latitude, longitude],
   );
 
