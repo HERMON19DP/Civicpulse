@@ -45,11 +45,58 @@ function analyzeCrossCategoryOverlap(categoryCounts, radiusMeters) {
   };
 }
 
-function computeRecurrenceAndSeverity(complaints, hasCrossCategoryOverlap) {
+function isHighRiskCategoryOverlap(categoryCounts = {}) {
+  return Boolean(
+    (categoryCounts.ROAD && categoryCounts.WATER_SUPPLY) ||
+      (categoryCounts.ELECTRICITY && categoryCounts.PUBLIC_SAFETY) ||
+      (categoryCounts.SANITATION && categoryCounts.WATER_SUPPLY) ||
+      (categoryCounts.ELECTRICITY && categoryCounts.WATER_SUPPLY),
+  );
+}
+
+/**
+ * Deterministic, explainable 4-tier hotspot severity calculation.
+ *
+ * Evaluates four factors using reliable complaint data:
+ *   1. Effective complaint priority (CRITICAL, HIGH, MEDIUM, LOW) on open complaints
+ *   2. Unresolved complaint burden (openCount vs resolved/rejected)
+ *   3. Meaningful high-risk cross-category overlaps:
+ *        - ROAD + WATER_SUPPLY (subsurface leakage undermining carriageway)
+ *        - ELECTRICITY + PUBLIC_SAFETY (night lighting / safety hazard)
+ *        - SANITATION + WATER_SUPPLY (drain obstruction / contamination risk)
+ *        - ELECTRICITY + WATER_SUPPLY (water near electrical infrastructure)
+ *   4. Unresolved complaint age (aged >= 7 days, severely aged >= 14 days)
+ *
+ * Thresholds:
+ *   - LOW:
+ *       * openCount === 0 (all complaints resolved/rejected), OR
+ *       * all open complaints are LOW priority, openCount < 5, no high-risk overlap,
+ *         and no open complaint aged >= 14 days.
+ *   - CRITICAL:
+ *       * >= 1 open CRITICAL-priority complaint, OR
+ *       * high-risk overlap AND (openCount >= 4 OR (openCount >= 3 && openHighCount >= 1)), OR
+ *       * openHighCount >= 2 && openCount >= 3, OR
+ *       * openCount >= 6 && agedOpenCount >= 3 && !allOpenAreLow.
+ *   - HIGH:
+ *       * high-risk overlap AND openCount >= 2, OR
+ *       * openHighCount >= 1 AND (openCount >= 2 OR agedOpenCount >= 1), OR
+ *       * openCount >= 5 && !allOpenAreLow, OR
+ *       * openCount >= 3 && severeAgedOpenCount >= 2 && !allOpenAreLow.
+ *   - MEDIUM:
+ *       * Default for all other unresolved hotspots (e.g., 2-4 MEDIUM complaints,
+ *         general non-high-risk overlaps, or minor clusters exceeding LOW caps).
+ */
+function computeRecurrenceAndSeverity(
+  complaints,
+  hasCrossCategoryOverlap,
+  categoryCounts = null,
+  nowMs = Date.now(),
+) {
   const count = complaints.length;
-  const openCount = complaints.filter(
+  const openComplaints = complaints.filter(
     (c) => !CLOSED_STATUSES.has(String(c.status || "").toUpperCase()),
-  ).length;
+  );
+  const openCount = openComplaints.length;
 
   const timestamps = complaints
     .map((c) => (c.createdAt ? new Date(c.createdAt).getTime() : NaN))
@@ -79,22 +126,59 @@ function computeRecurrenceAndSeverity(complaints, hasCrossCategoryOverlap) {
     Math.min(1, volumeScore + openScore + temporalPersistence).toFixed(2),
   );
 
-  const priorities = complaints.map((c) =>
-    String(c.priority || c.aiPriority || "").toUpperCase(),
+  // Derive category counts for open complaints (or fall back to provided categoryCounts)
+  const openCategoryCounts = {};
+  for (const c of openComplaints) {
+    const cat = String(c.canonicalCategory || c.category || "OTHER").toUpperCase();
+    openCategoryCounts[cat] = (openCategoryCounts[cat] || 0) + 1;
+  }
+  const effectiveCategoryCounts =
+    openCount > 0 ? openCategoryCounts : categoryCounts || {};
+  const highRiskOverlap =
+    hasCrossCategoryOverlap && isHighRiskCategoryOverlap(effectiveCategoryCounts);
+
+  const openPriorities = openComplaints.map((c) =>
+    String(c.priority || c.aiPriority || "MEDIUM").toUpperCase(),
   );
-  const criticalCount = priorities.filter((p) => p === "CRITICAL").length;
-  const highCount = priorities.filter((p) => p === "HIGH").length;
+  const openCriticalCount = openPriorities.filter((p) => p === "CRITICAL").length;
+  const openHighCount = openPriorities.filter((p) => p === "HIGH").length;
+  const openLowCount = openPriorities.filter((p) => p === "LOW").length;
+  const allOpenAreLow = openCount > 0 && openLowCount === openCount;
+
+  let agedOpenCount = 0;
+  let severeAgedOpenCount = 0;
+  for (const c of openComplaints) {
+    const createdMs = c.createdAt ? new Date(c.createdAt).getTime() : NaN;
+    if (!Number.isFinite(createdMs)) continue;
+    const ageDays = Math.max(0, (nowMs - createdMs) / 86400000);
+    if (ageDays >= 7) agedOpenCount += 1;
+    if (ageDays >= 14) severeAgedOpenCount += 1;
+  }
 
   let severity = "MEDIUM";
-  if (
-    criticalCount > 0 ||
-    (count >= 4 && hasCrossCategoryOverlap && openCount >= 2) ||
-    (highCount >= 2 && openCount >= 3)
+  if (openCount === 0) {
+    severity = "LOW";
+  } else if (
+    openCriticalCount >= 1 ||
+    (highRiskOverlap &&
+      (openCount >= 4 || (openCount >= 3 && openHighCount >= 1))) ||
+    (openHighCount >= 2 && openCount >= 3) ||
+    (openCount >= 6 && agedOpenCount >= 3 && !allOpenAreLow)
   ) {
     severity = "CRITICAL";
-  } else if (hasCrossCategoryOverlap || highCount >= 1 || count >= 3) {
+  } else if (
+    (highRiskOverlap && openCount >= 2) ||
+    (openHighCount >= 1 && (openCount >= 2 || agedOpenCount >= 1)) ||
+    (openCount >= 5 && !allOpenAreLow) ||
+    (openCount >= 3 && severeAgedOpenCount >= 2 && !allOpenAreLow)
+  ) {
     severity = "HIGH";
-  } else if (openCount === 0) {
+  } else if (
+    allOpenAreLow &&
+    openCount < 5 &&
+    !highRiskOverlap &&
+    severeAgedOpenCount === 0
+  ) {
     severity = "LOW";
   }
 
@@ -266,6 +350,7 @@ async function clusterComplaints(options) {
       const metrics = computeRecurrenceAndSeverity(
         cluster.complaints,
         overlap.hasCrossCategoryOverlap,
+        cluster.categoryCounts,
       );
 
       const { city, ward, zone } = resolveClusterWard(cluster.complaints, centroid);
@@ -361,4 +446,6 @@ async function clusterComplaints(options) {
 module.exports = {
   clusterComplaints,
   analyzeCrossCategoryOverlap,
+  computeRecurrenceAndSeverity,
+  isHighRiskCategoryOverlap,
 };

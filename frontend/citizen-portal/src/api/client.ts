@@ -2,7 +2,6 @@ import type {
   ActiveCitiesResponse,
   AssignedOfficerInfo,
   CitizenProfile,
-  ClassifyDraftResult,
   ComplaintCategory,
   ComplaintIntelligence,
   EvidenceFile,
@@ -162,17 +161,6 @@ export const api = {
       body: JSON.stringify({ email, password }),
     }),
 
-  classifyDraft: (payload: {
-    title: string;
-    description: string;
-    address?: string;
-    existingCategory?: string | null;
-  }) =>
-    request<{ data: ClassifyDraftResult }>("/intelligence/classify", {
-      method: "POST",
-      body: JSON.stringify(payload),
-    }),
-
   createComplaint: (payload: CreateComplaintPayload) =>
     request<CreateComplaintResponse>("/complaints", {
       method: "POST",
@@ -223,11 +211,7 @@ export const api = {
     }),
 
   submitAiFeedback: (payload: {
-    eventType:
-      | "DUPLICATE_SUGGESTION"
-      | "CLASSIFICATION_SUGGESTION"
-      | "PRIORITY_SUGGESTION"
-      | "TRIAGE_SUMMARY";
+    eventType: "DUPLICATE_SUGGESTION";
     action: "ACCEPTED" | "MODIFIED" | "REJECTED";
     complaintId?: string | null;
     targetComplaintId?: string | null;

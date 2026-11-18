@@ -18,12 +18,8 @@ import type {
   GeocodeResponse,
   HotspotDetectResponse,
   HotspotListResponse,
-  PersistedHotspot,
-  PersistedHotspotStatus,
   SpatialAnalysisRequest,
   SpatialAnalysisResult,
-  SpatialClusteringRequest,
-  SpatialClusteringResult,
   WardAnalyticsResponse,
 } from "../types/spatial";
 import type {
@@ -467,25 +463,14 @@ export const api = {
       },
     ),
 
-  analyzeSpatialClusters: (payload: SpatialClusteringRequest) =>
-    request<{ success: boolean; data: SpatialClusteringResult }>(
-      "/spatial/clusters",
-      {
-        method: "POST",
-        body: JSON.stringify(payload),
-      },
-    ),
-
   getHotspots: async (params?: {
     city?: string;
-    status?: string;
     ward?: string;
     overlapOnly?: boolean;
     limit?: number;
   }): Promise<HotspotListResponse> => {
     const searchParams = new URLSearchParams();
     if (params?.city && params.city !== "all") searchParams.set("city", params.city);
-    if (params?.status) searchParams.set("status", params.status);
     if (params?.ward) searchParams.set("ward", params.ward);
     if (params?.overlapOnly) searchParams.set("overlapOnly", "true");
     if (params?.limit) searchParams.set("limit", String(params.limit));
@@ -513,20 +498,6 @@ export const api = {
       {
         method: "POST",
         body: JSON.stringify(payload || { cityWide: true }),
-      },
-    );
-    return response.data;
-  },
-
-  updateHotspotStatus: async (
-    id: string,
-    status: PersistedHotspotStatus,
-  ): Promise<PersistedHotspot> => {
-    const response = await request<{ success: boolean; data: PersistedHotspot }>(
-      `/spatial/hotspots/${encodeURIComponent(id)}/status`,
-      {
-        method: "PATCH",
-        body: JSON.stringify({ status }),
       },
     );
     return response.data;

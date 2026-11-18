@@ -229,23 +229,13 @@ export default function MyComplaints() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight text-ink font-display">
-            My Complaints
-          </h1>
-          <p className="text-xs font-medium text-ink-soft mt-0.5">
-            Track and monitor resolution progress on your submitted reports
-          </p>
-        </div>
-
-        <Link
-          to="/report"
-          className="ios-btn-primary inline-flex items-center gap-1.5 self-start px-3.5 py-2 text-xs font-semibold text-white shadow-sm sm:self-auto"
-        >
-          <Plus size={14} weight="bold" />
-          Report Issue
-        </Link>
+      <div className="flex flex-col gap-1">
+        <h1 className="text-2xl font-bold tracking-tight text-ink font-display">
+          My Complaints
+        </h1>
+        <p className="text-xs font-medium text-ink-soft mt-0.5">
+          Track and monitor resolution progress on your submitted reports
+        </p>
       </div>
 
       <ExpandableFilterBar

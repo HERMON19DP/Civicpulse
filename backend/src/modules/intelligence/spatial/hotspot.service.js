@@ -203,25 +203,6 @@ async function getHotspotsForComplaint(complaintId) {
   }));
 }
 
-async function changeHotspotStatus(id, status) {
-  const updated = await hotspotRepository.updateHotspotStatus(id, status);
-  if (!updated) {
-    const error = new Error("Hotspot not found");
-    error.statusCode = 404;
-    error.code = "HOTSPOT_NOT_FOUND";
-    throw error;
-  }
-  const full = await hotspotRepository.listHotspots({ limit: 100 });
-  const matched = full.find((h) => h.id === id);
-  const serialized = matched ? serializeHotspotRow(matched) : serializeHotspotRow(updated);
-  if (process.env.NODE_ENV !== "test") {
-    graphBuilder
-      .syncKnowledgeGraph({ city: serialized.city || null })
-      .catch(() => {});
-  }
-  return serialized;
-}
-
 async function getWardAnalytics({
   city = null,
   timeWindowDays = null,
@@ -239,11 +220,19 @@ async function getWardAnalytics({
   for (const row of rows) {
     const cityName = row.city || "General Jurisdiction";
     const wardName = row.ward || "Unassigned Ward";
-    const key = `${cityName}::${wardName}`;
+    const zoneName = row.zone || "General Jurisdiction";
+    const adminWardId = row.administrative_ward_id || null;
+    const adminZoneId = row.administrative_zone_id || null;
+    const adminBoundaryVersionId = row.administrative_boundary_version_id || null;
+
+    // Prefer administrative_ward_id when present so aggregation uses canonical geography IDs
+    const key = adminWardId
+      ? `admin-ward::${adminWardId}`
+      : `${cityName}::${wardName}`;
 
     if (!wardMap.has(key)) {
       const areaSqKm = getWardAreaSqKm(wardName);
-      const hotspotMeta = hotspotCountsByWard.get(key) ||
+      const hotspotMeta = hotspotCountsByWard.get(`${cityName}::${wardName}`) ||
         hotspotCountsByWard.get(wardName) || {
           activeHotspots: 0,
           overlapHotspots: 0,
@@ -251,13 +240,17 @@ async function getWardAnalytics({
       wardMap.set(key, {
         city: cityName,
         ward: wardName,
-        zone: row.zone || "General Jurisdiction",
+        zone: zoneName,
+        administrativeWardId: adminWardId,
+        administrativeZoneId: adminZoneId,
+        administrativeBoundaryVersionId: adminBoundaryVersionId,
         areaSqKm,
         totalComplaints: 0,
         openComplaints: 0,
         resolvedComplaints: 0,
         highOrCriticalCount: 0,
         categoryCounts: {},
+        statusCounts: {},
         activeHotspots: hotspotMeta.activeHotspots,
         overlapHotspots: hotspotMeta.overlapHotspots,
         latSum: 0,
@@ -269,7 +262,8 @@ async function getWardAnalytics({
     const entry = wardMap.get(key);
     entry.totalComplaints += 1;
 
-    const statusUpper = String(row.status || "").toUpperCase();
+    const statusUpper = String(row.status || "SUBMITTED").toUpperCase();
+    entry.statusCounts[statusUpper] = (entry.statusCounts[statusUpper] || 0) + 1;
     if (statusUpper === "RESOLVED") {
       entry.resolvedComplaints += 1;
     }
@@ -301,6 +295,9 @@ async function getWardAnalytics({
         city: entry.city,
         ward: entry.ward,
         zone: entry.zone,
+        administrativeWardId: entry.administrativeWardId,
+        administrativeZoneId: entry.administrativeZoneId,
+        administrativeBoundaryVersionId: entry.administrativeBoundaryVersionId,
         areaSqKm: entry.areaSqKm,
         totalComplaints: entry.totalComplaints,
         openComplaints: entry.openComplaints,
@@ -311,6 +308,7 @@ async function getWardAnalytics({
         ),
         dominantCategory: sortedCats[0]?.[0] || "OTHER",
         categoryCounts: entry.categoryCounts,
+        statusCounts: entry.statusCounts,
         activeHotspots: entry.activeHotspots,
         overlapHotspots: entry.overlapHotspots,
         center:
@@ -324,12 +322,72 @@ async function getWardAnalytics({
     })
     .sort((a, b) => b.totalComplaints - a.totalComplaints);
 
+  // Aggregate zones while preserving ward-to-zone relationships
+  const zoneMap = new Map();
+  for (const w of wards) {
+    const zoneKey = w.administrativeZoneId
+      ? `admin-zone::${w.administrativeZoneId}`
+      : `${w.city}::${w.zone}`;
+
+    if (!zoneMap.has(zoneKey)) {
+      zoneMap.set(zoneKey, {
+        city: w.city,
+        zone: w.zone,
+        administrativeZoneId: w.administrativeZoneId || null,
+        wardCount: 0,
+        wards: [],
+        totalComplaints: 0,
+        openComplaints: 0,
+        resolvedComplaints: 0,
+        highOrCriticalCount: 0,
+        categoryCounts: {},
+        statusCounts: {},
+        hotspotCount: 0,
+        overlapHotspots: 0,
+      });
+    }
+
+    const zEntry = zoneMap.get(zoneKey);
+    zEntry.wardCount += 1;
+    zEntry.wards.push(w.ward);
+    zEntry.totalComplaints += w.totalComplaints;
+    zEntry.openComplaints += w.openComplaints;
+    zEntry.resolvedComplaints += w.resolvedComplaints;
+    zEntry.highOrCriticalCount += w.highOrCriticalCount;
+    zEntry.hotspotCount += w.activeHotspots;
+    zEntry.overlapHotspots += w.overlapHotspots;
+
+    for (const [cat, cnt] of Object.entries(w.categoryCounts)) {
+      zEntry.categoryCounts[cat] = (zEntry.categoryCounts[cat] || 0) + cnt;
+    }
+    for (const [st, cnt] of Object.entries(w.statusCounts)) {
+      zEntry.statusCounts[st] = (zEntry.statusCounts[st] || 0) + cnt;
+    }
+  }
+
+  const zones = Array.from(zoneMap.values())
+    .map((z) => {
+      const sortedCats = Object.entries(z.categoryCounts).sort(
+        (a, b) => b[1] - a[1],
+      );
+      return {
+        ...z,
+        dominantCategory: sortedCats[0]?.[0] || "OTHER",
+      };
+    })
+    .sort((a, b) => b.totalComplaints - a.totalComplaints);
+
+  const openComplaints = wards.reduce((sum, w) => sum + w.openComplaints, 0);
+
   return {
     city: city || null,
     timeWindowDays: timeWindowDays ?? null,
     totalWards: wards.length,
+    totalZones: zones.length,
     totalComplaints: rows.length,
+    openComplaints,
     wards,
+    zones,
   };
 }
 
@@ -459,7 +517,6 @@ module.exports = {
   detectAndPersistHotspots,
   listSavedHotspots,
   getHotspotsForComplaint,
-  changeHotspotStatus,
   getWardAnalytics,
   listActiveCities,
   geocodePlaceQuery,

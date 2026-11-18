@@ -102,25 +102,6 @@ export interface NearbyComplaint {
   updatedAt: string;
 }
 
-export interface ClassifyDraftResult {
-  category: string;
-  citizenCategory: ComplaintCategory;
-  department: string;
-  priority: string;
-  confidence: number;
-  tags: string[];
-  rationale: string;
-  summary: string;
-  keyPoints: string[];
-  recommendedAction: string;
-  metadata?: {
-    classificationProvenance?: {
-      source?: string;
-      modelName?: string | null;
-    };
-  };
-}
-
 export interface CitizenProfile {
   id: string;
   name: string;

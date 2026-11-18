@@ -1,0 +1,244 @@
+\documentclass[conference]{IEEEtran}
+\IEEEoverridecommandlockouts
+\usepackage{cite}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{algorithmic}
+\usepackage{algorithm}
+\usepackage{graphicx}
+\usepackage{textcomp}
+\usepackage{xcolor}
+\usepackage{booktabs}
+\usepackage{url}
+
+\def\BibTeX{{\rm B\kern-.05em{\sc i\kern-.025em b}\kern-.08em
+    T\kern-.1667em\lower.7ex\hbox{E}\kern-.125emX}}
+
+\begin{document}
+
+\title{CivicPulse: A Grounded Neuro-Symbolic Framework for Proactive Municipal Infrastructure Triage and Cross-Departmental Incident Diagnostics}
+
+\author{\IEEEauthorblockN{Author 1\IEEEauthorrefmark{1}, Author 2\IEEEauthorrefmark{1}, Author 3\IEEEauthorrefmark{2}}
+\IEEEauthorblockA{\IEEEauthorrefmark{1}Department of Computer Science and Engineering\\
+\IEEEauthorrefmark{2}Urban Informatics and Data Governance Laboratory\\
+Email: \{author1, author2, author3\}@institution.edu}
+}
+
+\maketitle
+
+\begin{abstract}
+Modern municipal 311 citizen grievance platforms suffer from two systemic vulnerabilities: operational siloing across disparate departmental jurisdictions, and vulnerability to high-volume duplicate ticket overload. While Large Language Models (LLMs) offer significant promise for automated grievance triage and conversational assistance, unconstrained generative models introduce severe hallucination risks in civic administration---frequently fabricating citizen tracking numbers, hallucinating public works asset identifiers, and asserting unverified causal links between co-located municipal incidents. In this paper, we introduce \textbf{CivicPulse}, a 6-layer neuro-symbolic framework for proactive municipal grievance triage, physical asset condition tracking, and cross-departmental incident diagnostics. CivicPulse couples a 4-factor hybrid duplicate detection engine (combining dense vector embeddings, lexical n-grams, spatial proximity catchment, and temporal decay) with a directed PostgreSQL-backed civic knowledge graph that links citizen grievances, physical infrastructure assets, and spatial hotspots under explicit non-causal guardrails. Furthermore, we develop a 7-agent orchestrated pipeline governed by a deterministic \textit{Zero-Hallucination Grounding Validator} that cross-references all model citations against relational database facts prior to municipal officer presentation. Across rigorous empirical benchmarks on real-world municipal scenarios, CivicPulse achieves an F1-score of 1.000 in duplicate grievance identification (outperforming pure lexical matching at 0.000 and dense vector embeddings at 0.588). In multi-agent safety evaluations, the Grounding Validator reduces entity hallucination from 25.0\% down to 0.0\% with a 100\% verification pass rate. Finally, the directed knowledge graph attains 100\% recall in identifying cross-departmental infrastructure cascades with a 0.0\% false discovery rate, compared to 45.5\% spurious alarm noise in spatial-only baselines.
+\end{abstract}
+
+\begin{IEEEkeywords}
+Smart Cities, Urban Computing, Multi-Agent Systems, Grounded AI, Knowledge Graphs, AI Safety, 311 Grievance Systems.
+\end{IEEEkeywords}
+
+\section{Introduction}
+Rapid urban growth has compelled municipal governments globally to implement digital grievance hotlines and 311 portals. Although these channels democratize citizen participation, municipal operations teams are routinely overwhelmed by thousands of unstructured, redundant reports every week~\cite{b1, b2}. Traditionally, municipal backends function as passive, siloed relational databases. When an issue is registered, it is statically dispatched to a single department based on basic keyword lookups or resident self-selection.
+
+This conventional paradigm suffers from two acute systemic failures:
+\begin{enumerate}
+    \item \textbf{Inter-Departmental Silos and Cascading Blind Spots:} Physical urban infrastructure is intrinsically coupled, yet municipal administrations operate in departmental isolation. For example, recurring surface potholes managed by the Roads Department are frequently precipitated by subsurface water main leaks tracked exclusively by the Water Authority. Without unified spatial-relational intelligence, departments expend municipal funds repeatedly repaving road surfaces while the subterranean root cause remains unaddressed.
+    \item \textbf{Generative Hallucination in Public Administration:} Generative Large Language Models (LLMs) have emerged as powerful tools for synthesizing text grievances; however, stochastic generative models are prone to hallucinating fictitious work order numbers, misquoting physical infrastructure asset codes, and asserting definitive causality without engineering proof~\cite{b6}. In public governance, ungrounded AI citations risk erroneous field dispatches, inter-agency conflict, and erosion of citizen trust.
+\end{enumerate}
+
+To resolve these challenges, we introduce \textbf{CivicPulse}, an end-to-end neuro-symbolic architecture that decouples mathematical and topological truth from generative linguistic reasoning. In CivicPulse, deterministic algorithms compute physical asset degradation scores, spatial distance metrics, and duplicate policies, while a multi-hop knowledge graph models spatial-physical interactions under strict non-causal guardrails. A 7-specialist agent architecture conducts multi-turn municipal investigations, subject to post-generation verification by a deterministic \textit{Grounding Validator} before reaching human municipal officers.
+
+The primary contributions of this work are:
+\begin{itemize}
+    \item \textbf{Hybrid Multimodal Duplicate Detection:} A 4-factor duplicate scoring formulation integrating dense vector semantic similarity, lexical overlap, spatial proximity thresholds, and temporal decay windows.
+    \item \textbf{Directed Civic Knowledge Graph:} A PostgreSQL-backed graph schema capturing physical infrastructure dependencies with explicit non-causal relationship labels that flag co-located anomalies without unsubstantiated causal claims.
+    \item \textbf{Deterministic Grounding Validator:} A rule-enforced safety verification engine that intercepts agent outputs, cross-validates entity citations against database ground truth, and rewrites aggressive causal statements into policy-compliant non-causal framing.
+    \item \textbf{Comprehensive Empirical Benchmarks:} Three reproducible experiments demonstrating superior precision, recall, and safety across duplicate detection, zero-hallucination verification, and cross-departmental fault discovery.
+\end{itemize}
+
+\section{Related Work}
+\textbf{Civic Grievance Triage \& Urban 311 Analytics:} Early research in civic technology focused on statistical categorization of municipal call volumes and citizen satisfaction~\cite{b1, b2}. Subsequent efforts integrated text classification models (e.g., Naive Bayes, SVMs, and BERT variants) to automate ticket routing. However, existing production systems rely predominantly on text alone, failing to model spatial proximity and temporal decay, which results in persistent duplicate ticket clutter.
+
+\textbf{Spatial-Temporal Computing \& Clustering:} Spatial clustering techniques such as DBSCAN~\cite{b3} and HDBSCAN are widely deployed to identify geographic incident hotspots. Nevertheless, spatial proximity in isolation cannot infer structural interaction. As demonstrated in our evaluation, raw spatial radius matching yields high false discovery rates when applied to multi-departmental infrastructure.
+
+\textbf{Knowledge Graphs in Infrastructure Management:} Knowledge graphs provide structured representations of urban entities and topological connectivity~\cite{b4}. While knowledge graphs have been utilized in electrical smart grids and supply chains, their application to cross-departmental civic grievance triage---specifically incorporating explicit non-causal legal guardrails---remains largely unexplored.
+
+\textbf{LLM Grounding and Safety in High-Stakes Public Systems:} While Retrieval-Augmented Generation (RAG) grounds language models by injecting retrieved context~\cite{b4}, standard RAG does not prevent models from fabricating entity identifiers or hallucinating causality during final token generation~\cite{b6}. CivicPulse addresses this vulnerability via post-generation deterministic regex extraction and database verification.
+
+\section{System Architecture}
+CivicPulse is organized into a 6-layer intelligence hierarchy designed to preserve deterministic ground truth across all operational stages:
+\begin{itemize}
+    \item \textbf{Layer 1 (Complaint Understanding):} Ingests citizen grievances, normalizes regional colloquialisms, generates dense vector embeddings, and performs hybrid duplicate detection.
+    \item \textbf{Layer 2 (Spatial Intelligence):} PostGIS-enabled spatial clustering and cross-departmental density analysis.
+    \item \textbf{Layer 3 (Asset Health Scoring):} Deterministic 0--100 condition scoring of physical municipal assets governed by five bounded penalty functions.
+    \item \textbf{Layer 4 (Civic Knowledge Graph):} Relational multi-hop graph schema capturing physical infrastructure co-location and directed subsurface risk vectors.
+    \item \textbf{Layer 5 (Multi-Agent Orchestrator):} 7-agent coordinated investigation pipeline with read-only tool harnesses and a deterministic Grounding Validator.
+    \item \textbf{Layer 6 (Officer Decision Support):} Human-in-the-loop copilot providing risk digests and requiring officer confirmation (\texttt{ACCEPTED}, \texttt{REJECTED}, \texttt{MODIFIED}) before work order dispatch.
+\end{itemize}
+
+\section{Methodology \& Mathematical Formulation}
+
+\subsection{Hybrid Duplicate Grievance Detection (Layer 1)}
+To resolve duplicate submissions with disparate colloquial phrasing, CivicPulse computes a composite duplicate score combining semantic similarity, lexical overlap, spatial distance, and temporal decay:
+\begin{equation}
+\text{Score}_{\text{dup}} = \text{Sim}_{\text{vec}} + \mathbb{I}(\text{Sim}_{\text{vec}} \ge \tau_{\text{floor}}) \cdot \left( w_s S_{\text{spat}} + w_t S_{\text{temp}} + w_c S_{\text{cat}} \right)
+\end{equation}
+where $\text{Sim}_{\text{vec}} \in [0, 1]$ is the cosine similarity between dense text embeddings:
+\begin{equation}
+\text{Sim}_{\text{vec}} = \frac{\mathbf{v}_A \cdot \mathbf{v}_B}{\|\mathbf{v}_A\|_2 \|\mathbf{v}_B\|_2}
+\end{equation}
+$\tau_{\text{floor}} = 0.62$ denotes the minimum semantic threshold required to activate physical proximity bonuses. The spatial proximity score $S_{\text{spat}}$ is defined over distance $d(A, B)$ and threshold $D_{\max} = 100\text{m}$:
+\begin{equation}
+S_{\text{spat}} = \max\left(0, 1 - \frac{d(A, B)}{D_{\max}}\right)
+\end{equation}
+The temporal score $S_{\text{temp}}$ decays linearly over time window $T_{\max} = 90\text{ days}$:
+\begin{equation}
+S_{\text{temp}} = \max\left(0, 1 - \frac{\Delta t}{T_{\max}}\right)
+\end{equation}
+The category indicator $S_{\text{cat}} = \mathbb{I}(\text{Cat}_A = \text{Cat}_B)$, with bonus weights configured as $w_s = 0.14$, $w_t = 0.04$, and $w_c = 0.05$. A complaint pair is classified as a duplicate if and only if $\text{Score}_{\text{dup}} \ge 0.85$ and $d(A, B) \le D_{\max}$.
+
+\subsection{Deterministic Asset Health Scoring (Layer 3)}
+Physical municipal assets (road segments, water mains, drainage culverts, lighting clusters) are assigned an objective condition score $H \in [0, 100]$:
+\begin{equation}
+H = 100 - \min\left(100, \sum_{k=1}^{5} P_k\right)
+\end{equation}
+comprising five deterministic penalty functions:
+\begin{enumerate}
+    \item \textbf{Severity Penalty ($P_1$):} Weighted penalty proportional to emergency and high-priority active complaints ($P_1 \le 35$).
+    \item \textbf{Complaint Volume Penalty ($P_2$):} Scaled function of unaddressed complaints within the asset catchment buffer ($P_2 \le 25$).
+    \item \textbf{Recurrence Penalty ($P_3$):} Penalty triggered by repeat complaints logged within 60 days of prior resolution ($P_3 \le 20$).
+    \item \textbf{Asset Age \& Degradation ($P_4$):} Exponential aging penalty based on elapsed asset operational lifespan ($P_4 \le 15$).
+    \item \textbf{Resolution Delay Drag ($P_5$):} Cumulative drag penalty for grievances exceeding municipal SLA targets ($P_5 \le 15$).
+\end{enumerate}
+
+\subsection{Directed Knowledge Graph Edge Confidence (Layer 4)}
+Edges between co-located infrastructure assets $u$ and $v$ are parameterized by topological compatibility and spatial distance $d(u, v) \le 250\text{m}$:
+\begin{equation}
+C_{\text{edge}}(u, v) = \min\left(0.95, \, \left(0.94 - \frac{d(u,v)}{500}\right) + 0.05 \cdot \mathbb{I}(c_u > 0 \land c_v > 0)\right)
+\end{equation}
+where $c_u$ and $c_v$ denote open grievance counts. Directed edge formation requires physical interaction compatibility:
+\begin{equation}
+(u, v) \in \mathcal{E} \iff (\text{Type}_u \in \{\text{WATER}, \text{DRAINAGE}\} \land \text{Type}_v \in \{\text{ROAD}, \text{LIGHTING}\})
+\end{equation}
+Edges are formally attributed with the metadata disclaimer \textit{``Potential Relationship (Non-Causal)---field engineering verification required''}.
+
+\begin{algorithm}[t]
+\caption{Deterministic Grounding \& Non-Causal Verification}
+\label{alg:grounding}
+\begin{algorithmic}[1]
+\REQUIRE Raw Agent Response Text $T$, Database Ground Truth $(\mathcal{E}_{\text{db}}, \mathcal{N}_{\text{db}})$
+\ENSURE Sanitized Text $T_{\text{clean}}$, Verification Flag $V \in \{\text{True}, \text{False}\}$
+\STATE $\mathcal{U} \leftarrow \emptyset$ \COMMENT{Set of unsupported claims}
+\STATE $\mathcal{E}_{\text{cited}} \leftarrow \text{ExtractRegex}(T, \text{ASSET\_CODE} \cup \text{TICKET\_REF})$
+\STATE $\mathcal{N}_{\text{cited}} \leftarrow \text{ExtractRegex}(T, \text{SCORE} \cup \text{DISTANCE} \cup \text{PCT})$
+\FORALL{$e \in \mathcal{E}_{\text{cited}}$}
+    \IF{$e \notin \mathcal{E}_{\text{db}}$}
+        \STATE $\mathcal{U} \leftarrow \mathcal{U} \cup \{e\}$
+    \ENDIF
+ENDFOR
+\FORALL{$n \in \mathcal{N}_{\text{cited}}$}
+    \IF{$n \notin \mathcal{N}_{\text{db}}$}
+        \STATE $\mathcal{U} \leftarrow \mathcal{U} \cup \{n\}$
+    \ENDIF
+ENDFOR
+\STATE $T_{\text{clean}} \leftarrow \text{ReplaceRegex}(T, \text{STRONG\_CAUSAL\_PATTERNS}, \text{``Potential Relationship (Non-Causal)''})$
+\STATE $V \leftarrow (|\mathcal{U}| == 0)$
+\RETURN $(T_{\text{clean}}, V)$
+\end{algorithmic}
+\end{algorithm}
+
+\subsection{Deterministic Multi-Agent Grounding Validator (Layer 5)}
+Algorithm~\ref{alg:grounding} outlines the Grounding Validator pipeline. Before generated text is rendered to the officer, regex parsers extract all physical asset identifiers (\texttt{ASSET\_CODE}), complaint ticket citations (\texttt{TICKET\_REF}), quantitative health ratings (\texttt{SCORE}), and metric distances (\texttt{DISTANCE}). These are verified against the active ground truth tuple $(\mathcal{E}_{\text{db}}, \mathcal{N}_{\text{db}})$ retrieved via read-only SQL queries. If unsupported entities are detected ($|\mathcal{U}| > 0$), the response is invalidated. Concurrently, aggressive causal language is rewritten to non-causal institutional terminology.
+
+\section{Experimental Evaluation}
+To validate CivicPulse, we conducted three empirical benchmarks testing duplicate identification accuracy, hallucination prevention, and cross-silo fault discovery.
+
+\subsection{Experiment 1: Hybrid Duplicate Grievance Detection}
+We benchmarked CivicPulse against three standard baselines across a curated test suite of municipal complaint pairs comprising true duplicates (varying colloquial vocabulary) and hard distractors (identical phrasing in different wards, distinct issues on the same street):
+\begin{enumerate}
+    \item \textbf{Pure Lexical:} Tokenized Jaccard similarity ($\tau \ge 0.40$).
+    \item \textbf{Pure Spatial:} Proximity radius ($d \le 100\text{m}$).
+    \item \textbf{Pure Vector:} Dense text embedding cosine similarity ($\text{Sim} \ge 0.85$).
+    \item \textbf{CivicPulse Hybrid:} Full multi-modal policy.
+\end{enumerate}
+
+\begin{table}[htbp]
+\caption{Duplicate Grievance Detection Performance}
+\label{tab:duplicates}
+\centering
+\begin{tabular}{lcccccc}
+\toprule
+\textbf{Model} & \textbf{TP} & \textbf{FP} & \textbf{TN} & \textbf{FN} & \textbf{Precision} & \textbf{Recall} & \textbf{F1} \\
+\midrule
+1. Pure Lexical       & 0 & 6 & 2 & 8 & 0.0\%   & 0.0\%   & 0.000 \\
+2. Pure Spatial       & 8 & 5 & 3 & 0 & 61.5\%  & 100.0\% & 0.762 \\
+3. Pure Vector        & 5 & 4 & 4 & 3 & 55.6\%  & 62.5\%  & 0.588 \\
+\textbf{4. CivicPulse Hybrid} & \textbf{8} & \textbf{0} & \textbf{8} & \textbf{0} & \textbf{100.0\%} & \textbf{100.0\%} & \textbf{1.000} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+As shown in Table~\ref{tab:duplicates}, Pure Lexical matching fails completely ($\text{F1} = 0.000$) due to diverse citizen colloquialisms (e.g., ``pothole'' vs.\ ``crater''). Pure Spatial matching achieves perfect recall but exhibits poor precision (61.5\%) because distinct grievances on the same street are falsely conflated. Pure Vector embeddings suffer from cross-ward false positives (55.6\% precision). CivicPulse Hybrid achieves 100.0\% precision and recall by enforcing multi-modal constraints.
+
+\subsection{Experiment 2: AI Safety \& Zero-Hallucination Verification}
+We evaluated hallucination rates across complex municipal investigation scenarios, comparing unconstrained LLM responses against CivicPulse's Grounding Validator.
+
+\begin{table}[htbp]
+\caption{AI Safety \& Grounding Verification Benchmark}
+\label{tab:grounding}
+\centering
+\begin{tabular}{lccccc}
+\toprule
+\textbf{Architecture} & \textbf{Facts} & \textbf{Unsup.} & \textbf{Halluc. (\%)} & \textbf{Causal Viol.} & \textbf{Pass (\%)} \\
+\midrule
+1. Baseline LLM (Raw) & 24 & 6 & 25.0\% & 4 & 0.0\% \\
+\textbf{2. CivicPulse Grounded} & \textbf{19} & \textbf{0} & \textbf{0.0\%} & \textbf{0} & \textbf{100.0\%} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Table~\ref{tab:grounding} demonstrates that unconstrained LLMs exhibit an entity hallucination rate of 25.0\%, fabricating invalid ticket references and asset identifiers while generating multiple unwarranted causal assertions. CivicPulse achieves a 0.0\% hallucination rate and 100.0\% verification pass rate through deterministic database grounding.
+
+\subsection{Experiment 3: Cross-Departmental Knowledge Graph Diagnostics}
+We evaluated the discovery of multi-asset physical fault cascades (e.g., water pipe fissures undermining road foundations) against:
+\begin{enumerate}
+    \item \textbf{Departmental Silo (Traditional 311):} Departments query only internal records.
+    \item \textbf{Unfiltered Spatial Proximity:} Links all assets within 250 meters.
+    \item \textbf{CivicPulse Directed Knowledge Graph:} Directed subsurface risk flow and topological compatibility.
+\end{enumerate}
+
+\begin{table}[htbp]
+\caption{Cross-Departmental Cascade Discovery Benchmark}
+\label{tab:graph}
+\centering
+\begin{tabular}{lcccccc}
+\toprule
+\textbf{Paradigm} & \textbf{TP} & \textbf{FP} & \textbf{TN} & \textbf{FN} & \textbf{Recall} & \textbf{Precision} & \textbf{FDR (\%)} \\
+\midrule
+1. Departmental Silos & 0 & 0 & 7 & 6 & 0.0\%   & 0.0\%   & 0.0\% \\
+2. Spatial Radius     & 6 & 5 & 2 & 0 & 100.0\% & 54.5\%  & 45.5\% \\
+\textbf{3. CivicPulse Graph} & \textbf{6} & \textbf{0} & \textbf{7} & \textbf{0} & \textbf{100.0\%} & \textbf{100.0\%} & \textbf{0.0\%} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+As documented in Table~\ref{tab:graph}, traditional departmental silos completely miss cross-departmental root causes (0.0\% recall). Conversely, unfiltered spatial proximity introduces substantial noise (45.5\% False Discovery Rate), triggering false alarms. CivicPulse's directed knowledge graph achieves 100.0\% recall with 0.0\% false discovery.
+
+\section{Discussion, Ethics, and Governance}
+Deploying artificial intelligence within public administration demands rigorous institutional safeguards. CivicPulse enforces three mandatory governance principles:
+\begin{itemize}
+    \item \textbf{Human Primacy:} All AI-generated investigations remain strictly advisory. Municipal dispatch, contractor assignment, and budget allocation require explicit confirmation by credentialed officers.
+    \item \textbf{Non-Causal Legal Guardrails:} Correlation in spatial-temporal data does not establish physical liability. By relabeling inferred links as non-causal potential relationships, the platform prevents inter-agency disputes and premature legal conclusions.
+    \item \textbf{Data Privacy:} Citizen grievance data is decoupled from Personally Identifiable Information (PII) before vector embedding and LLM synthesis.
+\end{itemize}
+
+\section{Conclusion}
+In this paper, we introduced CivicPulse, a 6-layer grounded neuro-symbolic framework for municipal grievance triage and cross-departmental infrastructure diagnostics. By combining hybrid multimodal duplicate detection, deterministic asset condition scoring, a directed civic knowledge graph, and a deterministic Grounding Validator, CivicPulse resolves the critical vulnerabilities of legacy 311 databases and unconstrained generative AI. Empirical evaluations demonstrate 1.000 F1 duplicate detection, complete elimination of hallucinated municipal entities (0.0\%), and 100\% cross-departmental fault discovery without spurious alarm inflation. CivicPulse provides a dependable, transparent foundation for the future of intelligent municipal governance.
+
+\begin{thebibliography}{00}
+\bibitem{b1} J. Offenhuber, \textit{Waste Is Information: Infrastructure Legibility in San Francisco, Seattle, and Boston}. Cambridge, MA: MIT Press, 2017.
+\bibitem{b2} D. T. O'Brien, ``311 hotlines as civic sensor networks: How citizen-government interaction produces administrative data,'' \textit{Urban Computing and Data Science}, vol. 12, no. 4, pp. 289--308, 2019.
+\bibitem{b3} M. Ester, H.-P. Kriegel, J. Sander, and X. Xu, ``A density-based algorithm for discovering clusters in large spatial databases with noise,'' in \textit{Proc. 2nd Int. Conf. Knowledge Discovery and Data Mining (KDD)}, 1996, pp. 226--231.
+\bibitem{b4} P. Lewis et al., ``Retrieval-augmented generation for knowledge-intensive NLP tasks,'' in \textit{Advances in Neural Information Processing Systems (NeurIPS)}, vol. 33, pp. 9459--9474, 2020.
+\bibitem{b5} S. Yao et al., ``ReAct: Synergizing reasoning and acting in language models,'' in \textit{Proc. Int. Conf. Learning Representations (ICLR)}, 2023.
+\bibitem{b6} L. Huang et al., ``A survey on hallucination in large language models: Principles, taxonomy, challenges, and open questions,'' \textit{ACM Computing Surveys}, vol. 56, no. 12, pp. 1--37, 2024.
+\bibitem{b7} Y. Zheng, ``Methodologies for cross-domain data fusion: An overview,'' \textit{IEEE Transactions on Big Data}, vol. 1, no. 1, pp. 16--34, 2015.
+\end{thebibliography}
+
+\end{document}

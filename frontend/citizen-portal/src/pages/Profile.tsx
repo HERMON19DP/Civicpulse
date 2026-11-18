@@ -4,7 +4,6 @@ import {
   Envelope,
   CalendarBlank,
   ShieldCheck,
-  SignOut,
   IdentificationCard,
   ArrowClockwise,
   LockKey,
@@ -87,12 +86,6 @@ export default function Profile() {
     } finally {
       setPasswordLoading(false);
     }
-  }
-
-  function handleLogout() {
-    localStorage.removeItem("cp_citizen_token");
-    localStorage.removeItem("cp_citizen_profile");
-    window.location.href = "/login";
   }
 
   if (loading) {
@@ -293,15 +286,6 @@ export default function Profile() {
           submitted complaint records consistent.
         </p>
       </div>
-
-      <button
-        type="button"
-        onClick={handleLogout}
-        className="flex w-full items-center justify-center gap-2 rounded-ios-xl border border-rose-300/50 bg-rose-500/10 py-3 text-xs font-bold text-rose-700 shadow-sm transition-all hover:bg-rose-500/20 active:scale-[0.99] cursor-pointer"
-      >
-        <SignOut size={16} weight="bold" />
-        Sign Out from Citizen Portal
-      </button>
     </div>
   );
 }

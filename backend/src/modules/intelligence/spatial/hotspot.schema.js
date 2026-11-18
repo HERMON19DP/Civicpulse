@@ -13,11 +13,6 @@ const detectHotspotsSchema = z.object({
   cityWide: z.boolean().optional().default(true),
 });
 
-const updateHotspotStatusSchema = z.object({
-  status: z.enum(["ACTIVE", "MONITORING", "RESOLVED"]),
-});
-
 module.exports = {
   detectHotspotsSchema,
-  updateHotspotStatusSchema,
 };

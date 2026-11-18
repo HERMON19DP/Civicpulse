@@ -38,7 +38,7 @@ function getBriefTeaser(
   stats: DashboardStats | null,
 ) {
   const criticalCount = infra?.summary?.gradeCounts?.CRITICAL ?? 0;
-  const hotspotCount = hotspots?.activeCount ?? 0;
+  const hotspotCount = hotspots?.total ?? 0;
   const overlapCount = hotspots?.crossCategoryOverlapCount ?? 0;
   const pendingCount = stats?.pending ?? 0;
 
@@ -111,7 +111,7 @@ export default function Dashboard() {
         api.getProfile().catch(() => null),
         api.getIntelligenceJobs(5).catch(() => null),
         api.getIntelligenceMetrics().catch(() => null),
-        api.getHotspots({ status: "ACTIVE", limit: 25 }).catch(() => null),
+        api.getHotspots({ limit: 25 }).catch(() => null),
         api.getInfrastructureHealth({ limit: 12 }).catch(() => null),
         api.getCopilotDigest({ limit: 3 }).catch(() => null),
       ]);
@@ -161,7 +161,7 @@ export default function Dashboard() {
         api.getQueue({ limit: 5 }),
         api.getIntelligenceJobs(5).catch(() => null),
         api.getIntelligenceMetrics().catch(() => null),
-        api.getHotspots({ status: "ACTIVE", limit: 25 }).catch(() => null),
+        api.getHotspots({ limit: 25 }).catch(() => null),
       ]);
       setStats(statsRes);
       setRecentComplaints(queueRes);
@@ -178,7 +178,7 @@ export default function Dashboard() {
   }
 
   const criticalAssetCount = infraOverview?.summary?.gradeCounts?.CRITICAL ?? 0;
-  const hotspotCount = hotspotSummary?.activeCount ?? 0;
+  const hotspotCount = hotspotSummary?.total ?? 0;
   const overlapCount = hotspotSummary?.crossCategoryOverlapCount ?? 0;
   const teaserSentence = getBriefTeaser(infraOverview, hotspotSummary, stats);
 

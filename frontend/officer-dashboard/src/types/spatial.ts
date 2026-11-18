@@ -9,19 +9,6 @@ export interface SpatialAnalysisRequest {
   ward?: string;
 }
 
-export interface SpatialClusteringRequest {
-  latitude?: number;
-  longitude?: number;
-  radiusMeters?: number;
-  clusterDistanceMeters: number;
-  minClusterSize: number;
-  category?: string;
-  timeWindowDays?: number;
-  city?: string;
-  ward?: string;
-  cityWide?: boolean;
-}
-
 export interface SpatialComplaint {
   id: string;
   referenceId: string;
@@ -61,69 +48,6 @@ export interface SpatialAnalysisResult {
   complaints: SpatialComplaint[];
 }
 
-export interface SpatialCluster {
-  clusterId: string;
-  title: string;
-  city?: string | null;
-  ward: string | null;
-  zone: string | null;
-  complaintCount: number;
-  openCount: number;
-  centroid: {
-    latitude: number;
-    longitude: number;
-  };
-  radiusMeters: number;
-  densityPerSqKm: number;
-  dominantCategory: string;
-  issueCategories: string[];
-  categoryCounts: Record<string, number>;
-  recurrenceScore: number;
-  confidence: number;
-  severity: "LOW" | "MEDIUM" | "HIGH" | "CRITICAL" | string;
-  hasCrossCategoryOverlap: boolean;
-  overlapCategories: string[];
-  overlapSummary: string | null;
-  firstReportedAt: string | null;
-  lastReportedAt: string | null;
-  complaints: SpatialComplaint[];
-}
-
-export interface CrossCategoryOverlapAlert {
-  clusterId: string;
-  title: string;
-  city?: string | null;
-  ward: string | null;
-  overlapCategories: string[];
-  overlapSummary: string | null;
-  complaintCount: number;
-  severity: string;
-  centroid: {
-    latitude: number;
-    longitude: number;
-  };
-}
-
-export interface SpatialClusteringResult {
-  center: {
-    latitude: number;
-    longitude: number;
-  } | null;
-  radiusMeters: number | null;
-  clusterDistanceMeters: number;
-  minClusterSize: number;
-  timeWindowDays: number | null;
-  totalComplaintsAnalyzed: number;
-  clusterCount: number;
-  clusteredComplaintCount: number;
-  excludedComplaintCount: number;
-  crossCategoryOverlapCount: number;
-  crossCategoryOverlaps: CrossCategoryOverlapAlert[];
-  clusters: SpatialCluster[];
-}
-
-export type PersistedHotspotStatus = "ACTIVE" | "MONITORING" | "RESOLVED";
-
 export interface PersistedHotspot {
   id: string;
   hotspotKey: string;
@@ -135,15 +59,13 @@ export interface PersistedHotspot {
     latitude: number;
     longitude: number;
   };
+  /** Internal geographic footprint radius used only for map circle rendering */
   radiusMeters: number;
   dominantCategory: string;
   issueCategories: string[];
   categoryCounts: Record<string, number>;
   complaintCount: number;
   openCount: number;
-  densityPerSqKm: number;
-  recurrenceScore: number;
-  confidence: number;
   severity: "LOW" | "MEDIUM" | "HIGH" | "CRITICAL" | string;
   hasCrossCategoryOverlap: boolean;
   overlapCategories: string[];
@@ -151,7 +73,6 @@ export interface PersistedHotspot {
   timeWindowDays: number | null;
   firstReportedAt: string | null;
   lastReportedAt: string | null;
-  status: PersistedHotspotStatus | string;
   metadata: Record<string, unknown>;
   detectedAt: string;
   updatedAt: string;
@@ -160,7 +81,6 @@ export interface PersistedHotspot {
 
 export interface HotspotListResponse {
   total: number;
-  activeCount: number;
   crossCategoryOverlapCount: number;
   hotspots: PersistedHotspot[];
 }
@@ -177,6 +97,9 @@ export interface WardAnalyticItem {
   city?: string | null;
   ward: string;
   zone: string;
+  administrativeWardId?: string | null;
+  administrativeZoneId?: string | null;
+  administrativeBoundaryVersionId?: string | null;
   areaSqKm: number;
   totalComplaints: number;
   openComplaints: number;
@@ -185,6 +108,7 @@ export interface WardAnalyticItem {
   densityPerSqKm: number;
   dominantCategory: string;
   categoryCounts: Record<string, number>;
+  statusCounts?: Record<string, number>;
   activeHotspots: number;
   overlapHotspots: number;
   center: {
@@ -193,12 +117,32 @@ export interface WardAnalyticItem {
   } | null;
 }
 
+export interface ZoneAnalyticItem {
+  city?: string | null;
+  zone: string;
+  administrativeZoneId?: string | null;
+  wardCount: number;
+  wards: string[];
+  totalComplaints: number;
+  openComplaints: number;
+  resolvedComplaints: number;
+  highOrCriticalCount: number;
+  dominantCategory: string;
+  categoryCounts: Record<string, number>;
+  statusCounts?: Record<string, number>;
+  hotspotCount: number;
+  overlapHotspots: number;
+}
+
 export interface WardAnalyticsResponse {
   city?: string | null;
   timeWindowDays: number | null;
   totalWards: number;
+  totalZones?: number;
   totalComplaints: number;
+  openComplaints?: number;
   wards: WardAnalyticItem[];
+  zones?: ZoneAnalyticItem[];
 }
 
 export interface ActiveCitySummary {

@@ -7,7 +7,6 @@ import Home from "./pages/Home";
 import ReportIssue from "./pages/ReportIssue";
 import MyComplaints from "./pages/MyComplaints";
 import ComplaintDetails from "./pages/ComplaintDetails";
-import CivicMap from "./pages/CivicMap";
 import Profile from "./pages/Profile";
 
 function isTokenValid(token: string | null): boolean {
@@ -65,7 +64,7 @@ export default function App() {
           <Route path="/report" element={<ReportIssue />} />
           <Route path="/complaints" element={<MyComplaints />} />
           <Route path="/complaints/:id" element={<ComplaintDetails />} />
-          <Route path="/map" element={<CivicMap />} />
+          <Route path="/map" element={<Navigate to="/complaints" replace />} />
           <Route path="/profile" element={<Profile />} />
         </Route>
 

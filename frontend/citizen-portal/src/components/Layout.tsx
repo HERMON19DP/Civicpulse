@@ -3,8 +3,8 @@ import {
   House,
   FileText,
   ClipboardText,
-  MapPin,
   User,
+  SignOut,
 } from "@phosphor-icons/react";
 import { AnimatePresence, motion } from "framer-motion";
 
@@ -12,13 +12,18 @@ const NAV_ITEMS = [
   { to: "/", label: "Home", icon: House, end: true },
   { to: "/report", label: "Report Issue", icon: FileText, end: false },
   { to: "/complaints", label: "My Complaints", icon: ClipboardText, end: false },
-  { to: "/map", label: "Civic Map", icon: MapPin, end: false },
   { to: "/profile", label: "Profile", icon: User, end: false },
 ];
 
 export function Layout() {
   const location = useLocation();
   const outlet = useOutlet();
+
+  function handleLogout() {
+    localStorage.removeItem("cp_citizen_token");
+    localStorage.removeItem("cp_citizen_profile");
+    window.location.href = "/login";
+  }
 
   return (
     <div className="min-h-[100dvh] flex flex-col">
@@ -56,12 +61,23 @@ export function Layout() {
             ))}
           </nav>
 
-          <NavLink
-            to="/report"
-            className="ios-btn-primary hidden px-4 py-2 text-xs font-bold text-white md:inline-block shadow-md cursor-pointer"
-          >
-            + Report an Issue
-          </NavLink>
+          <div className="flex items-center gap-2.5">
+            <NavLink
+              to="/report"
+              className="ios-btn-primary hidden px-4 py-2 text-xs font-bold text-white md:inline-block shadow-md cursor-pointer"
+            >
+              + Report an Issue
+            </NavLink>
+            <button
+              type="button"
+              onClick={handleLogout}
+              className="inline-flex items-center gap-1.5 rounded-xl border border-rose-200/80 bg-rose-50/70 px-3 py-1.5 text-xs font-bold text-rose-700 shadow-xs backdrop-blur-md transition hover:bg-rose-100 hover:text-rose-800 cursor-pointer"
+              title="Sign Out from Citizen Portal"
+            >
+              <SignOut size={15} weight="bold" />
+              <span className="hidden sm:inline">Sign Out</span>
+            </button>
+          </div>
         </div>
       </header>
 
@@ -88,7 +104,7 @@ export function Layout() {
 
       {/* Bottom tab bar — Apple iPhone Frosted Tab Bar for Mobile */}
       <nav
-        className="glass-bar sticky bottom-0 z-30 grid grid-cols-5 border-t border-white/60 md:hidden pb-safe shadow-[0_-4px_20px_rgba(15,23,42,0.05)]"
+        className="glass-bar sticky bottom-0 z-30 grid grid-cols-4 border-t border-white/60 md:hidden pb-safe shadow-[0_-4px_20px_rgba(15,23,42,0.05)]"
         aria-label="Primary"
       >
         {NAV_ITEMS.map(({ to, label, icon: Icon, end }) => (
@@ -107,9 +123,7 @@ export function Layout() {
               ? "Report"
               : label === "My Complaints"
                 ? "Complaints"
-                : label === "Civic Map"
-                  ? "Map"
-                  : label}
+                : label}
           </NavLink>
         ))}
       </nav>

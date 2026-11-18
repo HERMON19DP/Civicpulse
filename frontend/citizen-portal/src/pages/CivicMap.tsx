@@ -682,7 +682,7 @@ export default function CivicMap() {
                     {selected.title}
                   </h3>
                   <p className="text-xs text-ink-soft mt-1 leading-relaxed">
-                    {selected.aiSummary || selected.description}
+                    {selected.description}
                   </p>
                 </div>
 

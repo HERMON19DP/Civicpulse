@@ -5,7 +5,6 @@ jest.mock("./clustering.repository", () => ({
 jest.mock("../../../repositories/hotspot.repository", () => ({
   upsertHotspotWithMembers: jest.fn(),
   listHotspots: jest.fn(),
-  updateHotspotStatus: jest.fn(),
   queryWardComplaintStats: jest.fn(),
   findHotspotsByComplaintId: jest.fn(),
   listCityComplaintSummaries: jest.fn(),
@@ -13,7 +12,10 @@ jest.mock("../../../repositories/hotspot.repository", () => ({
 
 const { findClusters } = require("./clustering.repository");
 const hotspotRepository = require("../../../repositories/hotspot.repository");
-const { clusterComplaints } = require("./clustering.service");
+const {
+  clusterComplaints,
+  computeRecurrenceAndSeverity,
+} = require("./clustering.service");
 const hotspotService = require("./hotspot.service");
 const { resolveWardAndZone, searchPlacesOffline } = require("./ward.resolver");
 
@@ -268,5 +270,119 @@ describe("clusterComplaints & hotspotService (Layer 2)", () => {
       "Thiruvananthapuram",
     ]);
     expect(citiesPayload.directory.length).toBeGreaterThanOrEqual(5);
+  });
+
+  test("computeRecurrenceAndSeverity applies deterministic, explainable 4-tier rules", () => {
+    const nowMs = new Date("2026-11-18T12:00:00Z").getTime();
+    const recentDate = new Date("2026-11-17T12:00:00Z").toISOString();
+    const oldDate = new Date("2026-10-25T12:00:00Z").toISOString(); // 24 days old
+
+    // 1. Three recent minor (LOW) complaints must NOT escalate to HIGH
+    const threeMinor = [
+      { status: "SUBMITTED", priority: "LOW", canonicalCategory: "ROAD", createdAt: recentDate },
+      { status: "SUBMITTED", priority: "LOW", canonicalCategory: "ROAD", createdAt: recentDate },
+      { status: "SUBMITTED", priority: "LOW", canonicalCategory: "ROAD", createdAt: recentDate },
+    ];
+    expect(
+      computeRecurrenceAndSeverity(threeMinor, false, { ROAD: 3 }, nowMs).severity,
+    ).toBe("LOW");
+
+    // 2. Non-high-risk overlap (e.g., ROAD + SANITATION with 2 MEDIUM recent complaints) -> MEDIUM (not HIGH)
+    const generalOverlap = [
+      { status: "SUBMITTED", priority: "MEDIUM", canonicalCategory: "ROAD", createdAt: recentDate },
+      { status: "SUBMITTED", priority: "MEDIUM", canonicalCategory: "SANITATION", createdAt: recentDate },
+    ];
+    expect(
+      computeRecurrenceAndSeverity(generalOverlap, true, { ROAD: 1, SANITATION: 1 }, nowMs).severity,
+    ).toBe("MEDIUM");
+
+    // 3. High-risk overlap (ROAD + WATER_SUPPLY with 2 open complaints) -> HIGH
+    const highRiskOverlap = [
+      { status: "SUBMITTED", priority: "MEDIUM", canonicalCategory: "ROAD", createdAt: recentDate },
+      { status: "IN_PROGRESS", priority: "MEDIUM", canonicalCategory: "WATER_SUPPLY", createdAt: recentDate },
+    ];
+    expect(
+      computeRecurrenceAndSeverity(highRiskOverlap, true, { ROAD: 1, WATER_SUPPLY: 1 }, nowMs).severity,
+    ).toBe("HIGH");
+
+    // 4. High-risk overlap with 4+ open complaints -> CRITICAL
+    const criticalOverlap = [
+      { status: "SUBMITTED", priority: "MEDIUM", canonicalCategory: "ROAD", createdAt: recentDate },
+      { status: "SUBMITTED", priority: "MEDIUM", canonicalCategory: "ROAD", createdAt: recentDate },
+      { status: "SUBMITTED", priority: "MEDIUM", canonicalCategory: "WATER_SUPPLY", createdAt: recentDate },
+      { status: "IN_PROGRESS", priority: "MEDIUM", canonicalCategory: "WATER_SUPPLY", createdAt: recentDate },
+    ];
+    expect(
+      computeRecurrenceAndSeverity(criticalOverlap, true, { ROAD: 2, WATER_SUPPLY: 2 }, nowMs).severity,
+    ).toBe("CRITICAL");
+
+    // 5. Aged unresolved backlog (3 MEDIUM complaints with >= 2 aged >= 14 days) -> HIGH
+    const agedBacklog = [
+      { status: "SUBMITTED", priority: "MEDIUM", canonicalCategory: "ROAD", createdAt: oldDate },
+      { status: "SUBMITTED", priority: "MEDIUM", canonicalCategory: "ROAD", createdAt: oldDate },
+      { status: "SUBMITTED", priority: "MEDIUM", canonicalCategory: "ROAD", createdAt: recentDate },
+    ];
+    expect(
+      computeRecurrenceAndSeverity(agedBacklog, false, { ROAD: 3 }, nowMs).severity,
+    ).toBe("HIGH");
+
+    // 6. Fully resolved cluster -> LOW regardless of past priorities
+    const resolvedCluster = [
+      { status: "RESOLVED", priority: "CRITICAL", canonicalCategory: "WATER_SUPPLY", createdAt: oldDate },
+      { status: "RESOLVED", priority: "HIGH", canonicalCategory: "ROAD", createdAt: oldDate },
+    ];
+    expect(
+      computeRecurrenceAndSeverity(resolvedCluster, true, { WATER_SUPPLY: 1, ROAD: 1 }, nowMs).severity,
+    ).toBe("LOW");
+  });
+
+  test("getWardAnalytics aggregates zones, status breakdowns, and administrative geography IDs", async () => {
+    hotspotRepository.queryWardComplaintStats.mockResolvedValue({
+      rows: [
+        {
+          city: "Chennai",
+          ward: "Ward 121",
+          zone: "Zone 9 - Teynampet",
+          administrative_ward_id: "adm-w-121",
+          administrative_zone_id: "adm-z-9",
+          administrative_boundary_version_id: "ver-gcc-1",
+          canonical_category: "ROAD",
+          status: "SUBMITTED",
+          effective_priority: "HIGH",
+          latitude: 13.0418,
+          longitude: 80.2341,
+        },
+        {
+          city: "Chennai",
+          ward: "Ward 122",
+          zone: "Zone 9 - Teynampet",
+          administrative_ward_id: "adm-w-122",
+          administrative_zone_id: "adm-z-9",
+          administrative_boundary_version_id: "ver-gcc-1",
+          canonical_category: "WATER_SUPPLY",
+          status: "RESOLVED",
+          effective_priority: "MEDIUM",
+          latitude: 13.043,
+          longitude: 80.236,
+        },
+      ],
+      hotspotCountsByWard: new Map([
+        ["Chennai::Ward 121", { activeHotspots: 1, overlapHotspots: 0 }],
+      ]),
+    });
+
+    const analytics = await hotspotService.getWardAnalytics({ city: "Chennai" });
+    expect(analytics.totalWards).toBe(2);
+    expect(analytics.totalZones).toBe(1);
+    expect(analytics.totalComplaints).toBe(2);
+    expect(analytics.openComplaints).toBe(1);
+    expect(analytics.wards[0].administrativeWardId).toBe("adm-w-121");
+    expect(analytics.wards[0].statusCounts).toEqual({ SUBMITTED: 1 });
+    expect(analytics.zones[0].zone).toBe("Zone 9 - Teynampet");
+    expect(analytics.zones[0].administrativeZoneId).toBe("adm-z-9");
+    expect(analytics.zones[0].wardCount).toBe(2);
+    expect(analytics.zones[0].openComplaints).toBe(1);
+    expect(analytics.zones[0].resolvedComplaints).toBe(1);
+    expect(analytics.zones[0].statusCounts).toEqual({ SUBMITTED: 1, RESOLVED: 1 });
   });
 });

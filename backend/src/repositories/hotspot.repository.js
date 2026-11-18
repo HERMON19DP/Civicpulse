@@ -5,6 +5,30 @@ const {
 } = require("../modules/intelligence/spatial/spatial.repository");
 
 let hasHotspotsCityCache = null;
+let hasAdminGeoColumnsCache = null;
+
+async function supportsAdministrativeGeographyColumns(db = pool) {
+  if (hasAdminGeoColumnsCache !== null) {
+    return hasAdminGeoColumnsCache;
+  }
+  try {
+    const res = await db.query(
+      `SELECT COUNT(*)::int AS cnt
+       FROM information_schema.columns
+       WHERE table_schema = 'public'
+         AND table_name = 'complaints'
+         AND column_name IN (
+           'administrative_ward_id',
+           'administrative_zone_id',
+           'administrative_boundary_version_id'
+         )`,
+    );
+    hasAdminGeoColumnsCache = Number(res.rows[0]?.cnt || 0) === 3;
+    return hasAdminGeoColumnsCache;
+  } catch {
+    return false;
+  }
+}
 
 async function hasHotspotsTables(db = pool) {
   try {
@@ -376,24 +400,6 @@ async function listHotspots({
   }));
 }
 
-async function updateHotspotStatus(id, status) {
-  const exists = await hasHotspotsTables();
-  if (!exists) {
-    return null;
-  }
-
-  const res = await pool.query(
-    `UPDATE hotspots
-     SET status = $2,
-         updated_at = NOW()
-     WHERE id = $1
-     RETURNING *`,
-    [id, status.trim().toUpperCase()],
-  );
-
-  return res.rows[0] || null;
-}
-
 async function queryWardComplaintStats({
   city = null,
   timeWindowDays = null,
@@ -422,11 +428,21 @@ async function queryWardComplaintStats({
     ? `WHERE ${conditions.join(" AND ")}`
     : "";
 
+  const hasAdminGeo = await supportsAdministrativeGeographyColumns();
+  const adminGeoSelect = hasAdminGeo
+    ? `c.administrative_ward_id,
+       c.administrative_zone_id,
+       c.administrative_boundary_version_id,`
+    : `NULL::text AS administrative_ward_id,
+       NULL::text AS administrative_zone_id,
+       NULL::text AS administrative_boundary_version_id,`;
+
   const rowsRes = await pool.query(
     `SELECT
        COALESCE(NULLIF(TRIM(c.city), ''), 'General Jurisdiction') AS city,
        COALESCE(NULLIF(TRIM(c.ward), ''), 'Unassigned Ward') AS ward,
        COALESCE(NULLIF(TRIM(c.zone), ''), 'General Jurisdiction') AS zone,
+       ${adminGeoSelect}
        ${CANONICAL_CATEGORY_SQL} AS canonical_category,
        c.status,
        COALESCE(c.priority, c.ai_priority, 'MEDIUM') AS effective_priority,
@@ -458,8 +474,8 @@ async function queryWardComplaintStats({
       `SELECT
          ${cityExpr} AS city,
          COALESCE(NULLIF(TRIM(ward), ''), 'Unassigned Ward') AS ward,
-         COUNT(*) FILTER (WHERE status IN ('ACTIVE', 'MONITORING'))::int AS active_hotspots,
-         COUNT(*) FILTER (WHERE status IN ('ACTIVE', 'MONITORING') AND has_cross_category_overlap = TRUE)::int AS overlap_hotspots
+         COUNT(*)::int AS active_hotspots,
+         COUNT(*) FILTER (WHERE has_cross_category_overlap = TRUE)::int AS overlap_hotspots
        FROM hotspots
        ${hWhere}
        GROUP BY ${cityExpr}, COALESCE(NULLIF(TRIM(ward), ''), 'Unassigned Ward')`,
@@ -521,8 +537,8 @@ async function listCityComplaintSummaries() {
     const hsRes = await pool.query(
       `SELECT
          COALESCE(NULLIF(TRIM(city), ''), 'General Jurisdiction') AS city,
-         COUNT(*) FILTER (WHERE status IN ('ACTIVE', 'MONITORING'))::int AS hotspot_count,
-         COUNT(*) FILTER (WHERE status IN ('ACTIVE', 'MONITORING') AND has_cross_category_overlap = TRUE)::int AS overlap_count
+         COUNT(*)::int AS hotspot_count,
+         COUNT(*) FILTER (WHERE has_cross_category_overlap = TRUE)::int AS overlap_count
        FROM hotspots
        GROUP BY COALESCE(NULLIF(TRIM(city), ''), 'General Jurisdiction')`,
     );
@@ -557,7 +573,6 @@ module.exports = {
   hasHotspotsTables,
   upsertHotspotWithMembers,
   listHotspots,
-  updateHotspotStatus,
   queryWardComplaintStats,
   findHotspotsByComplaintId,
   listCityComplaintSummaries,

@@ -3,13 +3,10 @@ import { Link, useParams } from "react-router-dom";
 import {
   ArrowLeft,
   MapPin,
-  User,
   Buildings,
-  Sparkle,
   CheckCircle,
   Circle,
   Clock,
-  UploadSimple,
   FilePdf,
   VideoCamera,
   ArrowSquareOut,
@@ -141,8 +138,6 @@ export default function ComplaintDetails() {
   const [referenceId, setReferenceId] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [uploading, setUploading] = useState(false);
-  const [uploadError, setUploadError] = useState("");
 
   useEffect(() => {
     let cancelled = false;
@@ -183,27 +178,6 @@ export default function ComplaintDetails() {
       cancelled = true;
     };
   }, [id]);
-
-  async function handleUploadEvidence(fileList: FileList | null) {
-    if (!complaint || !fileList || fileList.length === 0) return;
-
-    setUploading(true);
-    setUploadError("");
-
-    try {
-      const files = Array.from(fileList);
-      const res = await api.uploadComplaintEvidence(complaint.id, files);
-      setComplaint((prev) =>
-        prev ? { ...prev, evidence: [...prev.evidence, ...res.data] } : null,
-      );
-    } catch (err) {
-      setUploadError(
-        err instanceof Error ? err.message : "Failed to upload evidence files.",
-      );
-    } finally {
-      setUploading(false);
-    }
-  }
 
   return (
     <div className="mx-auto max-w-2xl space-y-6">
@@ -256,7 +230,7 @@ export default function ComplaintDetails() {
               {complaint.description}
             </p>
 
-            <div className="grid gap-3 sm:grid-cols-3 pt-2 border-t border-white/40">
+            <div className="grid gap-3 sm:grid-cols-2 pt-2 border-t border-white/40">
               <InfoTile
                 icon={MapPin}
                 label="Location"
@@ -267,64 +241,14 @@ export default function ComplaintDetails() {
                 label="Department"
                 value={complaint.department || "Municipal General Services"}
               />
-              <InfoTile
-                icon={User}
-                label="Assigned Officer"
-                value={
-                  complaint.assignedOfficer?.name || "Awaiting officer assignment"
-                }
-              />
             </div>
 
-            {complaint.intelligence?.aiSummary && (
-              <div className="mt-4 rounded-ios-xl border border-indigo-200/70 bg-indigo-500/[0.06] p-3.5">
-                <div className="mb-1 flex flex-wrap items-center justify-between gap-2">
-                  <span className="inline-flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider text-indigo-700">
-                    <Sparkle size={13} weight="fill" />
-                    Automated Triage Summary
-                  </span>
-                  {complaint.intelligence.aiPriority && (
-                    <span className="rounded-full bg-white/80 px-2 py-0.5 text-[10px] font-bold text-indigo-700 border border-indigo-200/60">
-                      Priority: {complaint.intelligence.aiPriority}
-                    </span>
-                  )}
-                </div>
-                <p className="text-xs leading-relaxed text-ink">
-                  {complaint.intelligence.aiSummary}
-                </p>
-              </div>
-            )}
-
             <div className="mt-5 border-t border-white/40 pt-4">
-              <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+              <div className="mb-3 flex items-center justify-between gap-2">
                 <span className="text-xs font-semibold text-ink-soft uppercase tracking-wider">
                   Evidence ({complaint.evidence.length})
                 </span>
-                <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-full border border-white/70 bg-white/60 px-3 py-1 text-xs font-semibold text-primary shadow-sm hover:bg-white">
-                  <UploadSimple size={13} weight="bold" />
-                  {uploading ? "Uploading..." : "Upload Photos"}
-                  <input
-                    type="file"
-                    accept="image/*,video/mp4,video/webm,application/pdf"
-                    multiple
-                    disabled={uploading}
-                    className="hidden"
-                    onChange={(e) => {
-                      void handleUploadEvidence(e.target.files);
-                      e.target.value = "";
-                    }}
-                  />
-                </label>
               </div>
-
-              {uploadError && (
-                <p
-                  role="alert"
-                  className="mb-3 rounded-xl bg-rose-500/10 px-3 py-2 text-xs font-medium text-rose-700"
-                >
-                  {uploadError}
-                </p>
-              )}
 
               {complaint.evidence.length > 0 ? (
                 <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
@@ -364,7 +288,7 @@ export default function ComplaintDetails() {
                 </div>
               ) : (
                 <p className="mt-2 text-xs text-ink-soft">
-                  No evidence files uploaded yet. Use Upload Photos above to attach supporting files.
+                  No evidence files were attached to this complaint.
                 </p>
               )}
             </div>
@@ -463,16 +387,15 @@ function InfoTile({
   value: string;
 }) {
   return (
-    <div className="flex items-start gap-3 rounded-ios-xl border border-white/50 bg-white/30 p-3 backdrop-blur-sm">
-      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-blue-500/10 text-primary border border-blue-400/20 shadow-sm">
-        <Icon size={18} weight="duotone" />
+    <div className="flex items-start gap-2.5 rounded-xl border border-white/70 bg-white/50 p-3 shadow-xs">
+      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-blue-500/10 text-primary">
+        <Icon size={16} weight="duotone" />
       </div>
-
-      <div className="flex flex-col min-w-0">
-        <span className="text-[11px] font-semibold text-ink-soft uppercase tracking-wider">
+      <div className="min-w-0 flex-1">
+        <span className="block text-[11px] font-bold uppercase tracking-wider text-ink-soft">
           {label}
         </span>
-        <span className="text-xs sm:text-sm font-semibold text-ink break-words">
+        <span className="mt-0.5 block truncate text-xs font-semibold text-ink">
           {value}
         </span>
       </div>

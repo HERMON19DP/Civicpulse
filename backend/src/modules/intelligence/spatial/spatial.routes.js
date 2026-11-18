@@ -8,7 +8,6 @@ const {
   analyzeSpatialArea,
   detectHotspots,
   getHotspots,
-  updateHotspotStatus,
   getWardAnalytics,
   getActiveCities,
   geocodePlace,
@@ -47,13 +46,6 @@ router.post(
   authenticate,
   authorize(PERMISSIONS.SPATIAL_ANALYZE),
   detectHotspots,
-);
-
-router.patch(
-  "/hotspots/:id/status",
-  authenticate,
-  authorize(PERMISSIONS.SPATIAL_ANALYZE),
-  updateHotspotStatus,
 );
 
 router.get(

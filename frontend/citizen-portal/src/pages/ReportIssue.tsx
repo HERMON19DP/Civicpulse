@@ -5,13 +5,8 @@ import {
   CheckCircle,
   Warning,
   X,
-  Sparkle,
-  ArrowsClockwise,
 } from "@phosphor-icons/react";
-import type {
-  ClassifyDraftResult,
-  ComplaintCategory,
-} from "../types/complaint";
+import type { ComplaintCategory } from "../types/complaint";
 import LocationPicker, {
   type SelectedLocation,
 } from "../components/LocationPicker";
@@ -51,12 +46,6 @@ export default function ReportIssue() {
   const [submitError, setSubmitError] = useState("");
   const [evidenceWarning, setEvidenceWarning] = useState("");
 
-  const [aiDetecting, setAiDetecting] = useState(false);
-  const [aiError, setAiError] = useState("");
-  const [aiSuggestion, setAiSuggestion] = useState<ClassifyDraftResult | null>(
-    null,
-  );
-
   const [duplicateCandidates, setDuplicateCandidates] = useState<
     DuplicateCandidate[]
   >([]);
@@ -93,47 +82,6 @@ export default function ReportIssue() {
       }
     };
   }, [files]);
-
-  async function handleAutoClassify() {
-    setAiError("");
-    if (!title.trim() && !description.trim()) {
-      setAiError("Enter a short title or description first so AI can analyze your issue.");
-      return;
-    }
-
-    setAiDetecting(true);
-    try {
-      const response = await api.classifyDraft({
-        title: title.trim(),
-        description: description.trim(),
-        address: address.trim(),
-        existingCategory: category || null,
-      });
-
-      const suggestion = response.data;
-      setAiSuggestion(suggestion);
-
-      if (
-        suggestion.citizenCategory &&
-        CATEGORY_OPTIONS.some((c) => c.value === suggestion.citizenCategory)
-      ) {
-        setCategory(suggestion.citizenCategory);
-        setErrors((prev) => {
-          const next = { ...prev };
-          delete next.category;
-          return next;
-        });
-      }
-    } catch (err) {
-      setAiError(
-        err instanceof Error
-          ? err.message
-          : "Unable to analyze complaint draft right now.",
-      );
-    } finally {
-      setAiDetecting(false);
-    }
-  }
 
   function validateDetails() {
     const next: Record<string, string> = {};
@@ -230,25 +178,6 @@ export default function ReportIssue() {
       setCreatedComplaintId(result.data.id);
       setReferenceId(result.data.referenceId);
 
-      if (aiSuggestion) {
-        void api
-          .submitAiFeedback({
-            eventType: "CLASSIFICATION_SUGGESTION",
-            action:
-              category === aiSuggestion.citizenCategory ? "ACCEPTED" : "MODIFIED",
-            complaintId: result.data.id,
-            suggestedValue: aiSuggestion.citizenCategory,
-            finalValue: category,
-            metadata: {
-              confidence: aiSuggestion.confidence,
-              source:
-                aiSuggestion.metadata?.classificationProvenance?.source ||
-                "unknown",
-            },
-          })
-          .catch(() => {});
-      }
-
       if (files.length > 0) {
         try {
           await api.uploadComplaintEvidence(result.data.id, files);
@@ -324,7 +253,7 @@ export default function ReportIssue() {
           <span className="font-mono font-bold text-primary">
             #{referenceId}
           </span>
-          . Background AI triage is now routing and summarizing it for officers.
+          . It has been routed to the appropriate municipal department for review.
         </p>
 
         {evidenceWarning && (
@@ -436,56 +365,6 @@ export default function ReportIssue() {
               className={inputClass(!!errors.description)}
             />
           </Field>
-
-          {/* AI Auto-classification Helper Bar */}
-          <div className="space-y-2.5 rounded-2xl border border-indigo-200/70 bg-indigo-500/[0.06] p-3.5">
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <div className="flex items-center gap-2 text-xs">
-                <Sparkle size={16} weight="fill" className="text-indigo-600" />
-                <span className="font-bold text-ink">
-                  Smart Category &amp; Priority Assistant
-                </span>
-              </div>
-              <button
-                type="button"
-                onClick={() => void handleAutoClassify()}
-                disabled={aiDetecting}
-                className="inline-flex items-center gap-1.5 rounded-full border border-indigo-300/70 bg-white/85 px-3 py-1.5 text-xs font-semibold text-indigo-700 shadow-sm transition hover:bg-white disabled:opacity-60 cursor-pointer"
-              >
-                {aiDetecting ? (
-                  <ArrowsClockwise size={13} className="animate-spin" />
-                ) : (
-                  <Sparkle size={13} weight="fill" />
-                )}
-                {aiDetecting ? "Analyzing..." : "Auto-detect category with AI"}
-              </button>
-            </div>
-
-            {aiError && (
-              <p className="text-xs font-medium text-rose-700">{aiError}</p>
-            )}
-
-            {aiSuggestion && (
-              <div className="space-y-1.5 rounded-xl border border-white/70 bg-white/70 p-3 text-xs">
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <span className="font-bold text-indigo-800">
-                    Suggested: {CATEGORY_OPTIONS.find((c) => c.value === aiSuggestion.citizenCategory)?.label ?? aiSuggestion.category}
-                  </span>
-                  <span className="rounded-full bg-indigo-50 px-2 py-0.5 text-[10px] font-bold text-indigo-700">
-                    {Math.round(aiSuggestion.confidence * 100)}% confidence &middot;{" "}
-                    {aiSuggestion.metadata?.classificationProvenance?.source === "gemini"
-                      ? "Gemini AI"
-                      : "Rule-based NLP"}
-                  </span>
-                </div>
-                <p className="text-ink-soft">
-                  Department: <strong className="text-ink">{aiSuggestion.department}</strong> &middot;
-                  Priority: <strong className="text-ink">{aiSuggestion.priority}</strong>
-                </p>
-                <p className="text-ink-soft leading-relaxed">{aiSuggestion.summary}</p>
-              </div>
-            )}
-          </div>
 
           <Field label="Category" htmlFor="category" error={errors.category}>
             <select

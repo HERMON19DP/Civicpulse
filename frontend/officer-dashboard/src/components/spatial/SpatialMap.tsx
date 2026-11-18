@@ -1,4 +1,4 @@
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import {
   MapContainer,
   TileLayer,
@@ -12,15 +12,7 @@ import {
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 
-import type {
-  PersistedHotspot,
-  SpatialComplaint,
-  SpatialCluster,
-} from "../../types/spatial";
-
-type HotspotLike = (SpatialCluster | PersistedHotspot) & {
-  status?: string;
-};
+import type { PersistedHotspot, SpatialComplaint } from "../../types/spatial";
 
 interface SpatialMapProps {
   center: {
@@ -29,8 +21,11 @@ interface SpatialMapProps {
   };
   radiusMeters: number;
   showSearchCircle?: boolean;
+  enableLocationPicker?: boolean;
   complaints: SpatialComplaint[];
-  clusters?: HotspotLike[];
+  selectedComplaintId?: string | null;
+  onComplaintSelect?: (complaintId: string) => void;
+  hotspots?: PersistedHotspot[];
   wardMarkers?: Array<{
     city?: string | null;
     ward: string;
@@ -55,25 +50,31 @@ function MapBounds({
   positions,
   center,
   includeCenterInBounds,
+  enableLocationPicker,
   focusedLocation,
+  selectedComplaint,
 }: {
   positions: [number, number][];
   center: [number, number];
   includeCenterInBounds: boolean;
+  enableLocationPicker: boolean;
   focusedLocation?: {
     latitude: number;
     longitude: number;
     hotspotId?: string | null;
     label?: string | null;
   } | null;
+  selectedComplaint?: SpatialComplaint | null;
 }) {
   const map = useMap();
+  const hasInitializedPicker = useRef(false);
+
   const boundsSignature = useMemo(
     () =>
       JSON.stringify({
         positions,
-        center,
         includeCenterInBounds,
+        enableLocationPicker,
         focusedLocation: focusedLocation
           ? {
               lat: focusedLocation.latitude,
@@ -81,21 +82,61 @@ function MapBounds({
               hotspotId: focusedLocation.hotspotId ?? null,
             }
           : null,
+        selectedComplaintId: selectedComplaint?.id ?? null,
       }),
-    [positions, center, includeCenterInBounds, focusedLocation],
+    [
+      positions,
+      includeCenterInBounds,
+      enableLocationPicker,
+      focusedLocation,
+      selectedComplaint?.id,
+    ],
   );
 
+  // Pan smoothly to a selected complaint from the Nearby results list
   useEffect(() => {
+    if (
+      selectedComplaint &&
+      Number.isFinite(selectedComplaint.latitude) &&
+      Number.isFinite(selectedComplaint.longitude)
+    ) {
+      map.setView(
+        [selectedComplaint.latitude, selectedComplaint.longitude],
+        Math.max(map.getZoom(), 15),
+        { animate: true },
+      );
+    }
+  }, [map, selectedComplaint]);
+
+  useEffect(() => {
+    if (selectedComplaint) {
+      return;
+    }
+
     if (
       focusedLocation &&
       Number.isFinite(focusedLocation.latitude) &&
       Number.isFinite(focusedLocation.longitude)
     ) {
-      map.setView([focusedLocation.latitude, focusedLocation.longitude], 16, {
+      map.setView([focusedLocation.latitude, focusedLocation.longitude], 15, {
         animate: true,
       });
       return;
     }
+
+    if (enableLocationPicker) {
+      if (positions.length > 0) {
+        const pts = includeCenterInBounds ? [center, ...positions] : positions;
+        const bounds = L.latLngBounds(pts);
+        map.fitBounds(bounds, { padding: [48, 48], maxZoom: 16 });
+      } else if (!hasInitializedPicker.current) {
+        map.setView(center, 13);
+        hasInitializedPicker.current = true;
+      }
+      return;
+    }
+
+    hasInitializedPicker.current = false;
 
     if (positions.length === 0) {
       map.setView(center, 12);
@@ -133,7 +174,37 @@ function MapClickCenterSelector({
   return null;
 }
 
-function createClusterIcon(
+function createPickerPinIcon() {
+  return L.divIcon({
+    className: "spatial-picker-pin",
+    html: `
+      <div style="
+        width: 32px;
+        height: 32px;
+        border-radius: 50% 50% 50% 0;
+        transform: rotate(-45deg);
+        background: linear-gradient(135deg, #2563eb, #4f46e5);
+        border: 3px solid #ffffff;
+        box-shadow: 0 4px 12px rgba(37, 99, 235, 0.45);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      ">
+        <div style="
+          width: 9px;
+          height: 9px;
+          border-radius: 50%;
+          background: #ffffff;
+        "></div>
+      </div>
+    `,
+    iconSize: [32, 32],
+    iconAnchor: [16, 32],
+    popupAnchor: [0, -32],
+  });
+}
+
+function createHotspotIcon(
   count: number,
   hasOverlap?: boolean,
   severity?: string,
@@ -205,27 +276,38 @@ export default function SpatialMap({
   center,
   radiusMeters,
   showSearchCircle = true,
+  enableLocationPicker = false,
   complaints,
-  clusters,
+  selectedComplaintId = null,
+  onComplaintSelect,
+  hotspots,
   wardMarkers,
   focusedLocation,
   onCenterSelect,
 }: SpatialMapProps) {
-  const mapCenter: [number, number] = focusedLocation
-    ? [focusedLocation.latitude, focusedLocation.longitude]
-    : [center.latitude, center.longitude];
+  const pickerIcon = useMemo(() => createPickerPinIcon(), []);
 
-  const isClusterMode = clusters !== undefined;
+  const mapCenter: [number, number] = [center.latitude, center.longitude];
+
+  const isHotspotMode = hotspots !== undefined;
   const isWardMode = wardMarkers !== undefined;
+
+  const selectedComplaint = useMemo(
+    () =>
+      selectedComplaintId
+        ? complaints.find((c) => c.id === selectedComplaintId) ?? null
+        : null,
+    [complaints, selectedComplaintId],
+  );
 
   const positions: [number, number][] = isWardMode
     ? wardMarkers.map(
         (w) => [w.center.latitude, w.center.longitude] as [number, number],
       )
-    : isClusterMode
-      ? clusters.map(
-          (cluster) =>
-            [cluster.centroid.latitude, cluster.centroid.longitude] as [
+    : isHotspotMode
+      ? hotspots.map(
+          (hotspot) =>
+            [hotspot.centroid.latitude, hotspot.centroid.longitude] as [
               number,
               number,
             ],
@@ -239,7 +321,7 @@ export default function SpatialMap({
     <div className="h-[460px] w-full overflow-hidden rounded-2xl border border-white/60 shadow-ios-glass">
       <MapContainer
         center={mapCenter}
-        zoom={14}
+        zoom={13}
         scrollWheelZoom
         className="h-full w-full"
       >
@@ -252,11 +334,13 @@ export default function SpatialMap({
           positions={positions}
           center={mapCenter}
           includeCenterInBounds={showSearchCircle}
+          enableLocationPicker={enableLocationPicker}
           focusedLocation={focusedLocation}
+          selectedComplaint={selectedComplaint}
         />
         <MapClickCenterSelector onCenterSelect={onCenterSelect} />
 
-        {focusedLocation && (
+        {focusedLocation && !enableLocationPicker && (
           <CircleMarker
             center={[focusedLocation.latitude, focusedLocation.longitude]}
             radius={14}
@@ -270,112 +354,167 @@ export default function SpatialMap({
             <Popup>
               <div className="space-y-0.5 text-xs">
                 <strong className="text-blue-700">Focused Location</strong>
-                {focusedLocation.label && <p className="font-medium">{focusedLocation.label}</p>}
+                {focusedLocation.label && (
+                  <p className="font-medium">{focusedLocation.label}</p>
+                )}
                 <p className="font-mono text-[11px] text-slate-600">
-                  {focusedLocation.latitude.toFixed(5)}, {focusedLocation.longitude.toFixed(5)}
+                  {focusedLocation.latitude.toFixed(5)},{" "}
+                  {focusedLocation.longitude.toFixed(5)}
                 </p>
               </div>
             </Popup>
           </CircleMarker>
         )}
 
+        {/* Search radius circle & interactive draggable pin for Nearby Search */}
         {showSearchCircle && (
           <>
             <Circle
               center={mapCenter}
-              radius={radiusMeters}
+              radius={Math.max(50, radiusMeters)}
               pathOptions={{
-                color: "#6366f1",
+                color: "#4f46e5",
                 fillColor: "#6366f1",
-                fillOpacity: 0.06,
+                fillOpacity: 0.08,
                 weight: 2,
+                dashArray: enableLocationPicker ? "6 4" : undefined,
               }}
             />
 
-            <CircleMarker
-              center={mapCenter}
-              radius={7}
-              pathOptions={{
-                color: "#ffffff",
-                fillColor: "#6366f1",
-                fillOpacity: 1,
-                weight: 2,
-              }}
-            >
-              <Popup>Analysis Center</Popup>
-            </CircleMarker>
+            {enableLocationPicker ? (
+              <Marker
+                position={mapCenter}
+                icon={pickerIcon}
+                draggable
+                eventHandlers={{
+                  dragend: (event) => {
+                    const marker = event.target as L.Marker;
+                    const pos = marker.getLatLng();
+                    onCenterSelect?.({
+                      latitude: Number(pos.lat.toFixed(6)),
+                      longitude: Number(pos.lng.toFixed(6)),
+                    });
+                  },
+                }}
+              >
+                <Popup>
+                  <div className="space-y-1 text-xs">
+                    <strong className="text-indigo-700">
+                      Nearby Search Center
+                    </strong>
+                    <p className="text-slate-600">
+                      Drag pin or click anywhere on the map to adjust location.
+                    </p>
+                    <p className="font-mono text-[11px] text-slate-700">
+                      {center.latitude.toFixed(5)}, {center.longitude.toFixed(5)}
+                    </p>
+                    <p className="text-[11px] text-slate-600">
+                      Radius: {radiusMeters >= 1000 ? `${(radiusMeters / 1000).toFixed(radiusMeters % 1000 === 0 ? 0 : 1)} km` : `${radiusMeters} m`}
+                    </p>
+                  </div>
+                </Popup>
+              </Marker>
+            ) : (
+              <CircleMarker
+                center={mapCenter}
+                radius={7}
+                pathOptions={{
+                  color: "#ffffff",
+                  fillColor: "#6366f1",
+                  fillOpacity: 1,
+                  weight: 2,
+                }}
+              >
+                <Popup>Analysis Center</Popup>
+              </CircleMarker>
+            )}
           </>
         )}
 
         {/* Nearby complaint markers */}
-        {!isClusterMode &&
+        {!isHotspotMode &&
           !isWardMode &&
-          complaints.map((complaint) => (
-            <CircleMarker
-              key={complaint.id}
-              center={[complaint.latitude, complaint.longitude]}
-              radius={8}
-              pathOptions={{
-                color: "#ffffff",
-                fillColor: "#ef4444",
-                fillOpacity: 0.9,
-                weight: 2,
-              }}
-            >
-              <Popup>
-                <div className="min-w-[190px] space-y-1 text-xs">
-                  <strong>{complaint.referenceId}</strong>
-                  <p className="font-semibold">{complaint.title}</p>
-                  {(complaint.city || complaint.ward) && (
-                    <p>
-                      Location:{" "}
-                      {[complaint.ward, complaint.city].filter(Boolean).join(", ")}
-                    </p>
-                  )}
-                  <p>Category: {complaint.canonicalCategory}</p>
-                  <p>Status: {complaint.status}</p>
-                  <p>Distance: {complaint.distanceMeters.toFixed(1)} m</p>
-                </div>
-              </Popup>
-            </CircleMarker>
-          ))}
+          complaints.map((complaint) => {
+            const isSelected = selectedComplaintId === complaint.id;
+            return (
+              <div key={complaint.id}>
+                {isSelected && (
+                  <CircleMarker
+                    center={[complaint.latitude, complaint.longitude]}
+                    radius={16}
+                    pathOptions={{
+                      color: "#1d4ed8",
+                      fillColor: "#3b82f6",
+                      fillOpacity: 0.22,
+                      weight: 2.5,
+                    }}
+                  />
+                )}
+                <CircleMarker
+                  center={[complaint.latitude, complaint.longitude]}
+                  radius={isSelected ? 10 : 8}
+                  pathOptions={{
+                    color: "#ffffff",
+                    fillColor: isSelected ? "#1d4ed8" : "#ef4444",
+                    fillOpacity: 0.95,
+                    weight: isSelected ? 3 : 2,
+                  }}
+                  eventHandlers={{
+                    click: () => onComplaintSelect?.(complaint.id),
+                  }}
+                >
+                  <Popup>
+                    <div className="min-w-[190px] space-y-1 text-xs">
+                      <strong>{complaint.referenceId}</strong>
+                      <p className="font-semibold">{complaint.title}</p>
+                      {(complaint.city || complaint.ward) && (
+                        <p>
+                          Location:{" "}
+                          {[complaint.ward, complaint.city]
+                            .filter(Boolean)
+                            .join(", ")}
+                        </p>
+                      )}
+                      <p>Category: {complaint.canonicalCategory}</p>
+                      <p>Status: {complaint.status}</p>
+                      <p>Distance: {complaint.distanceMeters.toFixed(1)} m</p>
+                    </div>
+                  </Popup>
+                </CircleMarker>
+              </div>
+            );
+          })}
 
-        {/* Cluster / Persisted Hotspot footprints & markers */}
-        {isClusterMode &&
+        {/* Persisted Hotspot footprints & markers */}
+        {isHotspotMode &&
           !isWardMode &&
-          clusters.map((cluster) => {
-            const clusterKey =
-              "id" in cluster && cluster.id
-                ? cluster.id
-                : "clusterId" in cluster
-                  ? cluster.clusterId
-                  : `${cluster.centroid.latitude}-${cluster.centroid.longitude}`;
-            const isCritical = cluster.severity === "CRITICAL";
+          hotspots.map((hotspot) => {
+            const isCritical = hotspot.severity === "CRITICAL";
             const footprintColor = isCritical
               ? "#dc2626"
-              : cluster.hasCrossCategoryOverlap
+              : hotspot.hasCrossCategoryOverlap
                 ? "#d97706"
                 : "#2563eb";
 
             return (
-              <div key={clusterKey}>
+              <div key={hotspot.id}>
                 <Circle
                   center={[
-                    cluster.centroid.latitude,
-                    cluster.centroid.longitude,
+                    hotspot.centroid.latitude,
+                    hotspot.centroid.longitude,
                   ]}
-                  radius={Math.max(45, cluster.radiusMeters || 80)}
+                  radius={Math.max(45, hotspot.radiusMeters || 80)}
                   pathOptions={{
                     color: footprintColor,
                     fillColor: footprintColor,
-                    fillOpacity: cluster.hasCrossCategoryOverlap ? 0.16 : 0.1,
-                    weight: cluster.hasCrossCategoryOverlap ? 2.5 : 1.5,
+                    fillOpacity: hotspot.hasCrossCategoryOverlap ? 0.16 : 0.1,
+                    weight: hotspot.hasCrossCategoryOverlap ? 2.5 : 1.5,
                   }}
                 />
 
-                {cluster.complaints?.map((member) => (
+                {hotspot.complaints?.map((member) => (
                   <CircleMarker
-                    key={`${clusterKey}-${member.id}`}
+                    key={`${hotspot.id}-${member.id}`}
                     center={[member.latitude, member.longitude]}
                     radius={4.5}
                     pathOptions={{
@@ -398,42 +537,42 @@ export default function SpatialMap({
 
                 <Marker
                   position={[
-                    cluster.centroid.latitude,
-                    cluster.centroid.longitude,
+                    hotspot.centroid.latitude,
+                    hotspot.centroid.longitude,
                   ]}
-                  icon={createClusterIcon(
-                    cluster.complaintCount,
-                    cluster.hasCrossCategoryOverlap,
-                    cluster.severity,
+                  icon={createHotspotIcon(
+                    hotspot.complaintCount,
+                    hotspot.hasCrossCategoryOverlap,
+                    hotspot.severity,
                   )}
-                  title={`${cluster.title || "Complaint Hotspot"} (${cluster.complaintCount} complaints)`}
+                  title={`${hotspot.title || "Complaint Hotspot"} (${hotspot.complaintCount} complaints)`}
                 >
                   <Popup>
                     <div className="min-w-[225px] space-y-1.5 text-xs">
                       <strong className="block text-sm">
-                        {cluster.title || "Complaint Hotspot"}
+                        {hotspot.title || "Complaint Hotspot"}
                       </strong>
-                      {(cluster.city || cluster.ward) && (
+                      {(hotspot.city || hotspot.ward) && (
                         <p className="text-slate-600">
-                          {cluster.city ? `${cluster.city} · ` : ""}
-                          {cluster.ward}
-                          {cluster.zone ? ` · ${cluster.zone}` : ""}
+                          {hotspot.city ? `${hotspot.city} · ` : ""}
+                          {hotspot.ward}
+                          {hotspot.zone ? ` · ${hotspot.zone}` : ""}
                         </p>
                       )}
                       <p>
-                        <strong>{cluster.complaintCount}</strong> complaints (
-                        <strong>{cluster.openCount ?? 0}</strong> open) ·{" "}
-                        <strong>{cluster.severity || "MEDIUM"}</strong>
+                        <strong>{hotspot.complaintCount}</strong> complaints (
+                        <strong>{hotspot.openCount ?? 0}</strong> open) ·{" "}
+                        <strong>{hotspot.severity || "MEDIUM"}</strong>
                       </p>
-                      {cluster.hasCrossCategoryOverlap &&
-                        cluster.overlapSummary && (
+                      {hotspot.hasCrossCategoryOverlap &&
+                        hotspot.overlapSummary && (
                           <p className="rounded bg-amber-50 p-1.5 text-[11px] font-medium text-amber-900">
-                            Overlap: {cluster.overlapSummary}
+                            Overlap: {hotspot.overlapSummary}
                           </p>
                         )}
                       <div>
                         <strong>Categories:</strong>{" "}
-                        {Object.entries(cluster.categoryCounts)
+                        {Object.entries(hotspot.categoryCounts)
                           .map(
                             ([category, count]) =>
                               `${category.replace(/_/g, " ")} (${count})`,
@@ -441,14 +580,14 @@ export default function SpatialMap({
                           .join(", ")}
                       </div>
                       <div className="space-y-0.5 border-t pt-1">
-                        {cluster.complaints.slice(0, 5).map((c) => (
+                        {hotspot.complaints.slice(0, 5).map((c) => (
                           <p key={c.id} className="truncate">
                             {c.referenceId} — {c.title}
                           </p>
                         ))}
-                        {cluster.complaints.length > 5 && (
+                        {hotspot.complaints.length > 5 && (
                           <p className="text-slate-500">
-                            + {cluster.complaints.length - 5} more
+                            + {hotspot.complaints.length - 5} more
                           </p>
                         )}
                       </div>
@@ -465,7 +604,10 @@ export default function SpatialMap({
             <div key={`${wardItem.city || "gen"}-${wardItem.ward}`}>
               <Circle
                 center={[wardItem.center.latitude, wardItem.center.longitude]}
-                radius={Math.max(180, Math.min(800, wardItem.totalComplaints * 110))}
+                radius={Math.max(
+                  180,
+                  Math.min(800, wardItem.totalComplaints * 110),
+                )}
                 pathOptions={{
                   color: wardItem.overlapHotspots > 0 ? "#d97706" : "#4f46e5",
                   fillColor:
@@ -499,7 +641,7 @@ export default function SpatialMap({
                       <strong>{wardItem.openComplaints}</strong>
                     </p>
                     <p>Density: {wardItem.densityPerSqKm} / km²</p>
-                    <p>Active hotspots: {wardItem.activeHotspots}</p>
+                    <p>Persisted hotspots: {wardItem.activeHotspots}</p>
                   </div>
                 </Popup>
               </Marker>

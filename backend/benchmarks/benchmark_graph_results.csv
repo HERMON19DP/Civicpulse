@@ -1,0 +1,4 @@
+Paradigm,TP,FP,TN,FN,Recall,Precision,F1_Score,False_Discovery_Rate
+"1. Departmental Silo (Traditional 311)",0,0,7,6,0.0,0.0,0.000,0.0
+"2. Unfiltered Spatial Proximity (Radius <= 250m)",6,5,2,0,100.0,54.5,0.706,45.5
+"3. CivicPulse Directed Knowledge Graph (Layer 4)",6,0,7,0,100.0,100.0,1.000,0.0

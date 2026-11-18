@@ -2,7 +2,6 @@ import { Link } from "react-router-dom";
 import {
   FileText,
   ClipboardText,
-  MapPin,
   RoadHorizon,
   Drop,
   Lightning,
@@ -50,12 +49,6 @@ export default function Home() {
               >
                 <ClipboardText size={18} weight="bold" className="text-primary" /> Track My Complaints
               </Link>
-              <Link
-                to="/map"
-                className="inline-flex items-center gap-2 rounded-2xl border border-white/70 bg-white/60 px-5 py-3 text-sm font-semibold text-ink shadow-[inset_0_1px_1px_rgba(255,255,255,0.8),0_2px_8px_rgba(15,23,42,0.04)] backdrop-blur-md transition-all hover:bg-white/90"
-              >
-                <MapPin size={18} weight="bold" className="text-primary" /> Nearby Issues Map
-              </Link>
             </div>
           </div>
         </div>
@@ -95,8 +88,8 @@ export default function Home() {
         </div>
         <ol className="grid gap-6 sm:grid-cols-3">
           {[
-            { step: "1", title: "Report", body: "Describe the issue, let AI suggest the category, add photos, and pin the location." },
-            { step: "2", title: "Route", body: "We classify, summarize, and route it to the right officer or municipal department." },
+            { step: "1", title: "Report", body: "Describe the issue, choose a category, add photos, and pin the location." },
+            { step: "2", title: "Route", body: "We route your report to the right officer or municipal department." },
             { step: "3", title: "Track", body: "Follow persisted status updates and officer notes until it's resolved." },
           ].map(({ step, title, body }) => (
             <li
