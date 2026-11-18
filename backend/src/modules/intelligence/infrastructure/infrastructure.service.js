@@ -11,6 +11,9 @@ const {
   evaluateComplaintAssetMatch,
   computeAssetHealthScore,
 } = require("./health-score.calculator");
+const {
+  resolveAdministrativeArea,
+} = require("../spatial/administrative-geography.service");
 
 function serializeAsset(row) {
   const rule = ASSET_CATEGORY_RULES[row.asset_type] || {};
@@ -23,8 +26,10 @@ function serializeAsset(row) {
   const maintenanceAgeMonths = refDate
     ? Math.max(
         0,
-        Math.round(((nowMs - new Date(refDate).getTime()) / (30 * 24 * 60 * 60 * 1000)) * 10) /
-          10,
+        Math.round(
+          ((nowMs - new Date(refDate).getTime()) / (30 * 24 * 60 * 60 * 1000)) *
+            10,
+        ) / 10,
       )
     : (breakdown?.factors?.maintenanceAgeMonths ?? null);
 
@@ -46,13 +51,16 @@ function serializeAsset(row) {
     lastMaintainedAt: row.last_maintained_at || null,
     maintenanceAgeMonths,
     healthScore: Number(row.health_score ?? 100),
-    healthGrade: row.health_grade || deriveHealthGrade(Number(row.health_score ?? 100)),
+    healthGrade:
+      row.health_grade || deriveHealthGrade(Number(row.health_score ?? 100)),
     trend: row.trend || "STABLE",
     complaintCount: Number(row.complaint_count || 0),
     openComplaintCount: Number(row.open_complaint_count || 0),
     recurrenceCount: Number(row.recurrence_count || 0),
     maintenanceEventCount:
-      row.maintenance_event_count != null ? Number(row.maintenance_event_count) : undefined,
+      row.maintenance_event_count != null
+        ? Number(row.maintenance_event_count)
+        : undefined,
     scoreBreakdown: breakdown,
     lastScoredAt: row.last_scored_at || null,
     createdAt: row.created_at,
@@ -77,7 +85,8 @@ function serializeMaintenanceEvent(ev) {
     assetId: ev.asset_id,
     eventType: ev.event_type,
     outcome: ev.outcome,
-    performedBy: ev.performed_by || ev.actor_name || "Municipal Engineering Team",
+    performedBy:
+      ev.performed_by || ev.actor_name || "Municipal Engineering Team",
     actorId: ev.actor_id || null,
     notes: ev.notes || null,
     performedAt: ev.performed_at,
@@ -85,7 +94,11 @@ function serializeMaintenanceEvent(ev) {
   };
 }
 
-async function scoreSingleAsset(assetRow, allComplaints, { forceSnapshot = false } = {}) {
+async function scoreSingleAsset(
+  assetRow,
+  allComplaints,
+  { forceSnapshot = false } = {},
+) {
   const autoLinks = [];
 
   for (const complaint of allComplaints) {
@@ -114,18 +127,27 @@ async function scoreSingleAsset(assetRow, allComplaints, { forceSnapshot = false
     }
   }
 
-  await infrastructureRepository.replaceAutoComplaintLinks(assetRow.id, autoLinks);
+  await infrastructureRepository.replaceAutoComplaintLinks(
+    assetRow.id,
+    autoLinks,
+  );
 
   const [linkedComplaints, maintenanceEvents, historyRows] = await Promise.all([
     infrastructureRepository.fetchLinkedComplaintsForAsset(assetRow.id),
     infrastructureRepository.fetchMaintenanceEvents(assetRow.id),
     typeof infrastructureRepository.fetchHealthHistory === "function"
-      ? infrastructureRepository.fetchHealthHistory(assetRow.id, 12).catch(() => [])
+      ? infrastructureRepository
+          .fetchHealthHistory(assetRow.id, 12)
+          .catch(() => [])
       : Promise.resolve([]),
   ]);
 
-  const inActiveHotspot = linkedComplaints.some((c) => Boolean(c.in_active_hotspot));
-  const currentScore = assetRow.last_scored_at ? Number(assetRow.health_score) : null;
+  const inActiveHotspot = linkedComplaints.some((c) =>
+    Boolean(c.in_active_hotspot),
+  );
+  const currentScore = assetRow.last_scored_at
+    ? Number(assetRow.health_score)
+    : null;
   const nowMs = Date.now();
   const maxTrendWindowMs = 45 * 24 * 60 * 60 * 1000;
 
@@ -166,16 +188,19 @@ async function scoreSingleAsset(assetRow, allComplaints, { forceSnapshot = false
         Number(latestSnapshot.health_score) !== computed.healthScore ||
         latestSnapshotAgeMs > 60 * 60 * 1000));
 
-  const updated = await infrastructureRepository.updateAssetHealthScore(assetRow.id, {
-    healthScore: computed.healthScore,
-    healthGrade: computed.healthGrade,
-    trend: computed.trend,
-    complaintCount: computed.complaintCount,
-    openComplaintCount: computed.openComplaintCount,
-    recurrenceCount: computed.recurrenceCount,
-    scoreBreakdown: computed.scoreBreakdown,
-    recordSnapshot: shouldRecordSnapshot,
-  });
+  const updated = await infrastructureRepository.updateAssetHealthScore(
+    assetRow.id,
+    {
+      healthScore: computed.healthScore,
+      healthGrade: computed.healthGrade,
+      trend: computed.trend,
+      complaintCount: computed.complaintCount,
+      openComplaintCount: computed.openComplaintCount,
+      recurrenceCount: computed.recurrenceCount,
+      scoreBreakdown: computed.scoreBreakdown,
+      recordSnapshot: shouldRecordSnapshot,
+    },
+  );
 
   return serializeAsset(updated || assetRow);
 }
@@ -198,13 +223,16 @@ async function recalculateInfrastructureHealth({
     };
   }
 
-  const allComplaints = await infrastructureRepository.fetchAllScorableComplaints({
-    city: city && city !== "all" ? city : null,
-  });
+  const allComplaints =
+    await infrastructureRepository.fetchAllScorableComplaints({
+      city: city && city !== "all" ? city : null,
+    });
 
   const updatedAssets = [];
   for (const asset of assets) {
-    const scored = await scoreSingleAsset(asset, allComplaints, { forceSnapshot });
+    const scored = await scoreSingleAsset(asset, allComplaints, {
+      forceSnapshot,
+    });
     updatedAssets.push(scored);
   }
 
@@ -222,9 +250,10 @@ async function recalculateInfrastructureHealth({
 }
 
 async function getWardHealthSummary({ city = null } = {}) {
-  const { assets, complaints } = await infrastructureRepository.queryWardHealthInputs({
-    city: city && city !== "all" ? city : null,
-  });
+  const { assets, complaints } =
+    await infrastructureRepository.queryWardHealthInputs({
+      city: city && city !== "all" ? city : null,
+    });
 
   const wardMap = new Map();
 
@@ -348,7 +377,9 @@ async function getInfrastructureOverview({
   });
 
   if (assets.some((a) => !a.last_scored_at)) {
-    await recalculateInfrastructureHealth({ city: city && city !== "all" ? city : null });
+    await recalculateInfrastructureHealth({
+      city: city && city !== "all" ? city : null,
+    });
     assets = await infrastructureRepository.listAssets({
       city,
       ward,
@@ -366,12 +397,14 @@ async function getInfrastructureOverview({
   const avgHealthScore =
     totalAssets > 0
       ? Math.round(
-          serializedAssets.reduce((sum, a) => sum + a.healthScore, 0) / totalAssets,
+          serializedAssets.reduce((sum, a) => sum + a.healthScore, 0) /
+            totalAssets,
         )
       : null;
 
   const gradeCounts = {
-    CRITICAL: serializedAssets.filter((a) => a.healthGrade === "CRITICAL").length,
+    CRITICAL: serializedAssets.filter((a) => a.healthGrade === "CRITICAL")
+      .length,
     POOR: serializedAssets.filter((a) => a.healthGrade === "POOR").length,
     FAIR: serializedAssets.filter((a) => a.healthGrade === "FAIR").length,
     GOOD: serializedAssets.filter((a) => a.healthGrade === "GOOD").length,
@@ -396,7 +429,8 @@ async function getInfrastructureOverview({
     summary: {
       totalAssets,
       avgHealthScore,
-      avgHealthGrade: avgHealthScore != null ? deriveHealthGrade(avgHealthScore) : "GOOD",
+      avgHealthGrade:
+        avgHealthScore != null ? deriveHealthGrade(avgHealthScore) : "GOOD",
       gradeCounts,
       openLinkedComplaints: totalLinkedComplaints,
       maintenanceOverdueCount,
@@ -431,11 +465,13 @@ async function getAssetDetails(assetId) {
 
   let currentAsset = asset;
   if (!currentAsset.last_scored_at) {
-    const allComplaints = await infrastructureRepository.fetchAllScorableComplaints({
-      city: currentAsset.city,
-    });
+    const allComplaints =
+      await infrastructureRepository.fetchAllScorableComplaints({
+        city: currentAsset.city,
+      });
     await scoreSingleAsset(currentAsset, allComplaints);
-    currentAsset = (await infrastructureRepository.findAssetById(assetId)) || currentAsset;
+    currentAsset =
+      (await infrastructureRepository.findAssetById(assetId)) || currentAsset;
   }
 
   const [linkedRows, maintenanceRows, historyRows] = await Promise.all([
@@ -457,9 +493,11 @@ async function getAssetDetails(assetId) {
       ward: c.ward,
       address: c.address,
       linkType: c.link_type,
-      linkConfidence: c.link_confidence != null ? Number(c.link_confidence) : null,
+      linkConfidence:
+        c.link_confidence != null ? Number(c.link_confidence) : null,
       linkReason: c.link_reason || null,
-      distanceMeters: c.distance_meters != null ? Number(c.distance_meters) : null,
+      distanceMeters:
+        c.distance_meters != null ? Number(c.distance_meters) : null,
       upvoteCount: Number(c.upvote_count || 0),
       createdAt: c.created_at,
     })),
@@ -476,7 +514,9 @@ async function getAssetDetails(assetId) {
 }
 
 async function registerAsset(payload) {
-  const existing = await infrastructureRepository.findAssetByCode(payload.assetCode);
+  const existing = await infrastructureRepository.findAssetByCode(
+    payload.assetCode,
+  );
   if (existing) {
     const error = new Error(`Asset code "${payload.assetCode}" already exists`);
     error.statusCode = 409;
@@ -484,37 +524,56 @@ async function registerAsset(payload) {
     throw error;
   }
 
-  const resolvedGeo = resolveWardAndZone({
+  const administrativeArea = await resolveAdministrativeArea({
     latitude: payload.latitude,
     longitude: payload.longitude,
-    address: payload.address || `${payload.ward || ""} ${payload.city || ""}`,
   });
+
+  const fallbackGeo = administrativeArea
+    ? null
+    : resolveWardAndZone({
+        latitude: payload.latitude,
+        longitude: payload.longitude,
+        address:
+          payload.address || `${payload.ward || ""} ${payload.city || ""}`,
+      });
 
   const rule = ASSET_CATEGORY_RULES[payload.assetType] || {};
   const created = await infrastructureRepository.createAsset({
     assetCode: payload.assetCode.toUpperCase(),
     name: payload.name,
     assetType: payload.assetType,
-    city: payload.city || resolvedGeo.city,
-    ward: payload.ward || resolvedGeo.ward,
-    zone: payload.zone || resolvedGeo.zone,
+
+    city: administrativeArea?.city || payload.city || fallbackGeo?.city,
+    ward: administrativeArea?.ward || payload.ward || fallbackGeo?.ward,
+    zone: administrativeArea?.zone || payload.zone || fallbackGeo?.zone,
+
+    administrativeWardId: administrativeArea?.wardId || null,
+    administrativeZoneId: administrativeArea?.zoneId || null,
+    administrativeBoundaryVersionId:
+      administrativeArea?.boundaryVersionId || null,
+
     address: payload.address || null,
     latitude: payload.latitude,
     longitude: payload.longitude,
     catchmentRadiusMeters: payload.catchmentRadiusMeters ?? 250,
-    department: payload.department || rule.defaultDepartment || "Municipal Engineering",
+    department:
+      payload.department || rule.defaultDepartment || "Municipal Engineering",
     installDate: payload.installDate || null,
     lastMaintainedAt: payload.lastMaintainedAt || null,
     metadata: { createdVia: "officer-console" },
   });
 
-  const allComplaints = await infrastructureRepository.fetchAllScorableComplaints({
-    city: created.city,
-  });
+  const allComplaints =
+    await infrastructureRepository.fetchAllScorableComplaints({
+      city: created.city,
+    });
   await scoreSingleAsset(created, allComplaints, { forceSnapshot: true });
 
   if (process.env.NODE_ENV !== "test") {
-    graphBuilder.syncKnowledgeGraph({ city: created.city || null }).catch(() => {});
+    graphBuilder
+      .syncKnowledgeGraph({ city: created.city || null })
+      .catch(() => {});
   }
 
   return getAssetDetails(created.id);
@@ -540,10 +599,13 @@ async function recordMaintenanceForAsset(assetId, payload, actor = null) {
   });
 
   const refreshedAsset = await infrastructureRepository.findAssetById(assetId);
-  const allComplaints = await infrastructureRepository.fetchAllScorableComplaints({
-    city: refreshedAsset.city,
+  const allComplaints =
+    await infrastructureRepository.fetchAllScorableComplaints({
+      city: refreshedAsset.city,
+    });
+  await scoreSingleAsset(refreshedAsset, allComplaints, {
+    forceSnapshot: true,
   });
-  await scoreSingleAsset(refreshedAsset, allComplaints, { forceSnapshot: true });
 
   if (process.env.NODE_ENV !== "test") {
     graphBuilder
@@ -562,7 +624,8 @@ async function getAssetsForComplaint(complaintId) {
   if (typeof infrastructureRepository.findAssetsForComplaint !== "function") {
     return [];
   }
-  const rows = await infrastructureRepository.findAssetsForComplaint(complaintId);
+  const rows =
+    await infrastructureRepository.findAssetsForComplaint(complaintId);
   return rows.map(serializeAsset);
 }
 
@@ -573,7 +636,9 @@ async function getInfrastructureMetrics({ city = null } = {}) {
   });
 
   if (assets.some((a) => !a.last_scored_at)) {
-    await recalculateInfrastructureHealth({ city: city && city !== "all" ? city : null });
+    await recalculateInfrastructureHealth({
+      city: city && city !== "all" ? city : null,
+    });
     assets = await infrastructureRepository.listAssets({
       city: city && city !== "all" ? city : null,
       limit: 250,
@@ -649,9 +714,12 @@ async function getInfrastructureMetrics({ city = null } = {}) {
     const sPen = Number(b.severityPenalty ?? 0);
     const dPen = Number(b.unresolvedDurationPenalty ?? 0);
     const mPen = Number(b.maintenanceAgePenalty ?? 0);
-    const totPen = Number(b.totalPenalty ?? Math.max(0, 100 - asset.healthScore));
+    const totPen = Number(
+      b.totalPenalty ?? Math.max(0, 100 - asset.healthScore),
+    );
 
-    gradeDistribution[asset.healthGrade] = (gradeDistribution[asset.healthGrade] || 0) + 1;
+    gradeDistribution[asset.healthGrade] =
+      (gradeDistribution[asset.healthGrade] || 0) + 1;
     trendDistribution[asset.trend] = (trendDistribution[asset.trend] || 0) + 1;
 
     sumScore += asset.healthScore;
@@ -680,22 +748,37 @@ async function getInfrastructureMetrics({ city = null } = {}) {
     }
 
     // What-if perturbations over the deterministic penalty model
-    const ifResolvedPenalty = mPen + Math.min(4, Number(b.factors?.resolvedActiveCount ?? 0) * 1.0);
-    sumResolveOpenScore += Math.max(0, Math.min(100, Math.round(100 - ifResolvedPenalty)));
+    const ifResolvedPenalty =
+      mPen + Math.min(4, Number(b.factors?.resolvedActiveCount ?? 0) * 1.0);
+    sumResolveOpenScore += Math.max(
+      0,
+      Math.min(100, Math.round(100 - ifResolvedPenalty)),
+    );
 
     const ifMaintainedPenalty = Math.max(0, totPen - mPen);
-    sumCompleteMaintScore += Math.max(0, Math.min(100, Math.round(100 - ifMaintainedPenalty)));
+    sumCompleteMaintScore += Math.max(
+      0,
+      Math.min(100, Math.round(100 - ifMaintainedPenalty)),
+    );
 
     const crossCount = Number(b.factors?.crossImpactCount ?? 0);
     const hotspotPenaltyApprox = b.factors?.inActiveHotspot ? 3.5 : 0;
-    const estimatedOverlapRelief = Math.min(rPen, crossCount * 3.5 + hotspotPenaltyApprox);
+    const estimatedOverlapRelief = Math.min(
+      rPen,
+      crossCount * 3.5 + hotspotPenaltyApprox,
+    );
     const ifNoOverlapPenalty = Math.max(0, totPen - estimatedOverlapRelief);
-    sumRemoveOverlapScore += Math.max(0, Math.min(100, Math.round(100 - ifNoOverlapPenalty)));
+    sumRemoveOverlapScore += Math.max(
+      0,
+      Math.min(100, Math.round(100 - ifNoOverlapPenalty)),
+    );
   }
 
   const baselineAvgHealth = round2(sumScore / count);
   const whatIfResolveAllOpenAvgHealth = round2(sumResolveOpenScore / count);
-  const whatIfCompleteMaintenanceAvgHealth = round2(sumCompleteMaintScore / count);
+  const whatIfCompleteMaintenanceAvgHealth = round2(
+    sumCompleteMaintScore / count,
+  );
   const whatIfEliminateOverlapAvgHealth = round2(sumRemoveOverlapScore / count);
 
   return {
@@ -726,7 +809,9 @@ async function getInfrastructureMetrics({ city = null } = {}) {
     sensitivityAnalysis: {
       baselineAvgHealth,
       whatIfResolveAllOpenAvgHealth,
-      deltaResolveOpenPts: round2(whatIfResolveAllOpenAvgHealth - baselineAvgHealth),
+      deltaResolveOpenPts: round2(
+        whatIfResolveAllOpenAvgHealth - baselineAvgHealth,
+      ),
       whatIfCompleteMaintenanceAvgHealth,
       deltaCompleteMaintenancePts: round2(
         whatIfCompleteMaintenanceAvgHealth - baselineAvgHealth,

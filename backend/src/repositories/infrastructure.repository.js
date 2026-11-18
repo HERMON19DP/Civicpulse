@@ -36,11 +36,14 @@ async function listAssets({
     idx += 1;
   }
 
-  const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
+  const whereClause =
+    conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
 
-  let orderClause = "a.health_score ASC, a.open_complaint_count DESC, a.updated_at DESC";
+  let orderClause =
+    "a.health_score ASC, a.open_complaint_count DESC, a.updated_at DESC";
   if (sortBy === "most_complaints") {
-    orderClause = "a.open_complaint_count DESC, a.complaint_count DESC, a.health_score ASC";
+    orderClause =
+      "a.open_complaint_count DESC, a.complaint_count DESC, a.health_score ASC";
   } else if (sortBy === "maintenance_age") {
     orderClause = "a.last_maintained_at ASC NULLS FIRST, a.health_score ASC";
   } else if (sortBy === "highest_health") {
@@ -91,11 +94,29 @@ async function findAssetByCode(assetCode) {
 async function createAsset(data) {
   const res = await pool.query(
     `INSERT INTO infrastructure_assets (
-       asset_code, name, asset_type, city, ward, zone, address,
-       latitude, longitude, catchment_radius_meters, department,
-       install_date, last_maintained_at, metadata
+       asset_code,
+       name,
+       asset_type,
+       city,
+       ward,
+       zone,
+       address,
+       latitude,
+       longitude,
+       catchment_radius_meters,
+       department,
+       install_date,
+       last_maintained_at,
+       metadata,
+       administrative_ward_id,
+       administrative_zone_id,
+       administrative_boundary_version_id
      )
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14::jsonb)
+     VALUES (
+       $1, $2, $3, $4, $5, $6, $7, $8, $9,
+       $10, $11, $12, $13, $14::jsonb,
+       $15, $16, $17
+     )
      RETURNING *`,
     [
       data.assetCode,
@@ -112,8 +133,12 @@ async function createAsset(data) {
       data.installDate || null,
       data.lastMaintainedAt || null,
       JSON.stringify(data.metadata || {}),
+      data.administrativeWardId || null,
+      data.administrativeZoneId || null,
+      data.administrativeBoundaryVersionId || null,
     ],
   );
+
   return res.rows[0];
 }
 
@@ -282,9 +307,13 @@ async function createMaintenanceEvent({
 
     if (
       outcome === "COMPLETED" &&
-      ["REPAIR", "RESURFACING", "REPLACEMENT", "CLEANING", "PREVENTIVE_MAINTENANCE"].includes(
-        eventType,
-      )
+      [
+        "REPAIR",
+        "RESURFACING",
+        "REPLACEMENT",
+        "CLEANING",
+        "PREVENTIVE_MAINTENANCE",
+      ].includes(eventType)
     ) {
       await client.query(
         `UPDATE infrastructure_assets

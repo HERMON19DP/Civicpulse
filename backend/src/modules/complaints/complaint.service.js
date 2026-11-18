@@ -22,6 +22,9 @@ const {
   getCityHubByName,
 } = require("../intelligence/spatial/ward.resolver");
 const {
+  resolveAdministrativeArea,
+} = require("../intelligence/spatial/administrative-geography.service");
+const {
   enqueueComplaintEnrichment,
 } = require("../../jobs/complaint-enrichment.job");
 const infrastructureService = require("../intelligence/infrastructure/infrastructure.service");
@@ -78,8 +81,13 @@ async function resolveTargetOfficer(officerId) {
 
   assertValidUuid(officerId, "Officer");
   const officer = await userRepository.findUserById(officerId);
-  if (!officer || !["OFFICER", "ADMIN"].includes(String(officer.role).toUpperCase())) {
-    const error = new Error("Selected assignee must be a valid officer or admin");
+  if (
+    !officer ||
+    !["OFFICER", "ADMIN"].includes(String(officer.role).toUpperCase())
+  ) {
+    const error = new Error(
+      "Selected assignee must be a valid officer or admin",
+    );
     error.statusCode = 400;
     error.code = "INVALID_ASSIGNEE";
     throw error;
@@ -99,7 +107,18 @@ async function createComplaint({
 }) {
   const normalizedCategory = normalizeCategory(category);
   const defaultDepartment = getDepartmentForCategory(normalizedCategory);
-  const { city, ward, zone } = resolveWardAndZone({ latitude, longitude, address });
+  const administrativeArea = await resolveAdministrativeArea({
+    latitude,
+    longitude,
+  });
+
+  const fallbackGeo = administrativeArea
+    ? null
+    : resolveWardAndZone({ latitude, longitude, address });
+
+  const city = administrativeArea?.city || fallbackGeo?.city || null;
+  const ward = administrativeArea?.ward || fallbackGeo?.ward || null;
+  const zone = administrativeArea?.zone || fallbackGeo?.zone || null;
   const client = await pool.connect();
 
   let created;
@@ -119,6 +138,10 @@ async function createComplaint({
       latitude,
       longitude,
       db: client,
+      administrativeWardId: administrativeArea?.wardId || null,
+      administrativeZoneId: administrativeArea?.zoneId || null,
+      administrativeBoundaryVersionId:
+        administrativeArea?.boundaryVersionId || null,
     });
 
     await complaintHistoryRepository.recordStatusChange({

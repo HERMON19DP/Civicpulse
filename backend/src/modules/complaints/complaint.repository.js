@@ -142,6 +142,9 @@ async function createComplaint({
   latitude,
   longitude,
   db = pool,
+  administrativeWardId = null,
+  administrativeZoneId = null,
+  administrativeBoundaryVersionId = null,
 }) {
   const [hasLocation, hasWard, hasCity] = await Promise.all([
     supportsPostGisLocation(db),
@@ -160,6 +163,9 @@ async function createComplaint({
     "address",
     "latitude",
     "longitude",
+    "administrative_ward_id",
+    "administrative_zone_id",
+    "administrative_boundary_version_id",
   ];
   const values = [
     citizenId,
@@ -172,6 +178,9 @@ async function createComplaint({
     address,
     latitude,
     longitude,
+    administrativeWardId,
+    administrativeZoneId,
+    administrativeBoundaryVersionId,
   ];
 
   const latParamIdx = baseCols.indexOf("latitude") + 1;
@@ -263,7 +272,13 @@ async function assignComplaintOfficer(id, officerId, db = pool) {
   return findComplaintById(id, db);
 }
 
-async function findAllComplaints({ status, category, city, query, limit } = {}) {
+async function findAllComplaints({
+  status,
+  category,
+  city,
+  query,
+  limit,
+} = {}) {
   const conditions = [];
   const values = [];
 
