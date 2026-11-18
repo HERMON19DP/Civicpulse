@@ -1,4 +1,11 @@
-import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  useCallback,
+  type FormEvent,
+} from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { AnimatePresence, motion } from "framer-motion";
 import {
@@ -31,7 +38,11 @@ import {
   Wrench,
   X,
 } from "@phosphor-icons/react";
-import { ExpandableFilterBar, type ActiveFilterChip } from "../components/ExpandableFilterBar";
+import {
+  ExpandableFilterBar,
+  type ActiveFilterChip,
+} from "../components/ExpandableFilterBar";
+import AssetLocationPicker from "../components/spatial/AssetLocationPicker";
 import { api } from "../api/client";
 import type { ActiveCitiesResponse } from "../types/spatial";
 import type {
@@ -57,9 +68,17 @@ const ASSET_TYPE_OPTIONS: Array<{
 }> = [
   { value: "all", label: "All Asset Types", shortLabel: "All Types" },
   { value: "ROAD_SEGMENT", label: "Road Segments", shortLabel: "Roads" },
-  { value: "WATER_PIPELINE", label: "Water Pipelines", shortLabel: "Water Pipelines" },
+  {
+    value: "WATER_PIPELINE",
+    label: "Water Pipelines",
+    shortLabel: "Water Pipelines",
+  },
   { value: "DRAINAGE", label: "Drainage Networks", shortLabel: "Drainage" },
-  { value: "STREETLIGHT_CLUSTER", label: "Streetlight Clusters", shortLabel: "Streetlights" },
+  {
+    value: "STREETLIGHT_CLUSTER",
+    label: "Streetlight Clusters",
+    shortLabel: "Streetlights",
+  },
   { value: "WASTE_POINT", label: "Waste Points", shortLabel: "Waste Points" },
 ];
 
@@ -79,45 +98,28 @@ const SORT_OPTIONS = [
   { value: "ward", label: "Ward (A–Z)" },
 ];
 
-const MAINTENANCE_TYPES: Array<{ value: MaintenanceEventType; label: string }> = [
-  { value: "INSPECTION", label: "Field Inspection" },
-  { value: "REPAIR", label: "Corrective Repair" },
-  { value: "RESURFACING", label: "Resurfacing / Rehabilitation" },
-  { value: "REPLACEMENT", label: "Component Replacement" },
-  { value: "CLEANING", label: "Desilting / Cleaning" },
-  { value: "PREVENTIVE_MAINTENANCE", label: "Preventive Maintenance" },
-];
+const MAINTENANCE_TYPES: Array<{ value: MaintenanceEventType; label: string }> =
+  [
+    { value: "INSPECTION", label: "Field Inspection" },
+    { value: "REPAIR", label: "Corrective Repair" },
+    { value: "RESURFACING", label: "Resurfacing / Rehabilitation" },
+    { value: "REPLACEMENT", label: "Component Replacement" },
+    { value: "CLEANING", label: "Desilting / Cleaning" },
+    { value: "PREVENTIVE_MAINTENANCE", label: "Preventive Maintenance" },
+  ];
 
-const MAINTENANCE_OUTCOMES: Array<{ value: MaintenanceOutcome; label: string }> = [
+const MAINTENANCE_OUTCOMES: Array<{
+  value: MaintenanceOutcome;
+  label: string;
+}> = [
   { value: "COMPLETED", label: "Completed (Resets maintenance clock)" },
   { value: "PARTIAL", label: "Partial Work" },
   { value: "DEFERRED", label: "Deferred / Scheduled" },
   { value: "FAILED_INSPECTION", label: "Failed Inspection" },
 ];
 
-const CITY_CENTER_PRESETS: Record<
-  string,
-  { lat: string; lng: string; ward: string; zone: string }
-> = {
-  Hyderabad: {
-    lat: "17.4156",
-    lng: "78.4357",
-    ward: "Ward 12 · Banjara Hills",
-    zone: "Central Zone",
-  },
-  Thiruvananthapuram: {
-    lat: "8.7519",
-    lng: "76.7867",
-    ward: "Kalambalam Ward",
-    zone: "Thiruvananthapuram Rural Zone",
-  },
-  Bengaluru: {
-    lat: "12.9716",
-    lng: "77.5946",
-    ward: "Indiranagar Ward",
-    zone: "East Zone",
-  },
-};
+/** Default initial map centre — used only before the officer picks a location */
+const DEFAULT_MAP_CENTER = { latitude: 13.0418, longitude: 80.2341 }; // Chennai GCC centre
 
 function getGradeTheme(grade: HealthGrade) {
   switch (grade) {
@@ -274,9 +276,16 @@ function HealthScoreRing({
   );
 }
 
-function HealthHistorySparkline({ history }: { history: HealthHistoryPoint[] }) {
+function HealthHistorySparkline({
+  history,
+}: {
+  history: HealthHistoryPoint[];
+}) {
   const sorted = [...history]
-    .sort((a, b) => new Date(a.recordedAt).getTime() - new Date(b.recordedAt).getTime())
+    .sort(
+      (a, b) =>
+        new Date(a.recordedAt).getTime() - new Date(b.recordedAt).getTime(),
+    )
     .slice(-10);
 
   if (sorted.length < 2) {
@@ -292,13 +301,17 @@ function HealthHistorySparkline({ history }: { history: HealthHistoryPoint[] }) 
 
   const points = sorted.map((pt, idx) => {
     const x =
-      sorted.length === 1 ? width / 2 : padX + (idx / (sorted.length - 1)) * usableW;
+      sorted.length === 1
+        ? width / 2
+        : padX + (idx / (sorted.length - 1)) * usableW;
     const clampedScore = Math.max(0, Math.min(100, pt.healthScore));
     const y = padY + (1 - clampedScore / 100) * usableH;
     return { x, y, pt };
   });
 
-  const polylinePts = points.map((p) => `${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(" ");
+  const polylinePts = points
+    .map((p) => `${p.x.toFixed(1)},${p.y.toFixed(1)}`)
+    .join(" ");
   const lastPt = points[points.length - 1];
   const strokeColor = getGradeTheme(lastPt.pt.healthGrade).ringStroke;
 
@@ -307,7 +320,8 @@ function HealthHistorySparkline({ history }: { history: HealthHistoryPoint[] }) 
       <div className="mb-1 flex items-center justify-between text-[10px] font-semibold text-ink-soft">
         <span>Trajectory ({sorted.length} snapshots)</span>
         <span className="font-mono text-ink">
-          {Math.round(sorted[0].healthScore)} → {Math.round(lastPt.pt.healthScore)} pts
+          {Math.round(sorted[0].healthScore)} →{" "}
+          {Math.round(lastPt.pt.healthScore)} pts
         </span>
       </div>
       <svg
@@ -351,7 +365,8 @@ function HealthHistorySparkline({ history }: { history: HealthHistoryPoint[] }) 
             strokeWidth={1.5}
           >
             <title>
-              {pt.healthScore}/100 ({pt.healthGrade}) · {formatDateShort(pt.recordedAt)}
+              {pt.healthScore}/100 ({pt.healthGrade}) ·{" "}
+              {formatDateShort(pt.recordedAt)}
             </title>
           </circle>
         ))}
@@ -369,7 +384,9 @@ export default function InfrastructureHealth() {
   const [viewMode, setViewMode] = useState<ViewMode>("assets");
   const [selectedCity, setSelectedCity] = useState<string>(initialCity);
   const [selectedWard, setSelectedWard] = useState<string>(initialWard);
-  const [assetTypeFilter, setAssetTypeFilter] = useState<"all" | AssetType>("all");
+  const [assetTypeFilter, setAssetTypeFilter] = useState<"all" | AssetType>(
+    "all",
+  );
   const [gradeFilter, setGradeFilter] = useState<"all" | HealthGrade>("all");
   const [conditionFilter, setConditionFilter] = useState<
     "all" | "deteriorating" | "overdue" | "cross_impact"
@@ -379,11 +396,19 @@ export default function InfrastructureHealth() {
   const [searchTerm, setSearchTerm] = useState<string>("");
   const [filtersOpen, setFiltersOpen] = useState<boolean>(false);
 
-  const [citiesData, setCitiesData] = useState<ActiveCitiesResponse | null>(null);
-  const [overview, setOverview] = useState<InfrastructureOverviewResponse | null>(null);
-  const [infraMetrics, setInfraMetrics] = useState<InfrastructureMetricsResponse | null>(null);
-  const [selectedAssetId, setSelectedAssetId] = useState<string | null>(initialAssetId);
-  const [assetDetails, setAssetDetails] = useState<AssetDetailsResponse | null>(null);
+  const [citiesData, setCitiesData] = useState<ActiveCitiesResponse | null>(
+    null,
+  );
+  const [overview, setOverview] =
+    useState<InfrastructureOverviewResponse | null>(null);
+  const [infraMetrics, setInfraMetrics] =
+    useState<InfrastructureMetricsResponse | null>(null);
+  const [selectedAssetId, setSelectedAssetId] = useState<string | null>(
+    initialAssetId,
+  );
+  const [assetDetails, setAssetDetails] = useState<AssetDetailsResponse | null>(
+    null,
+  );
 
   const overviewReqSeq = useRef(0);
   const detailsReqSeq = useRef(0);
@@ -412,11 +437,14 @@ export default function InfrastructureHealth() {
   const [formulaOpen, setFormulaOpen] = useState<boolean>(false);
   const [complaintsOpen, setComplaintsOpen] = useState<boolean>(true);
   const [maintenanceOpen, setMaintenanceOpen] = useState<boolean>(true);
-  const [showLogMaintenanceForm, setShowLogMaintenanceForm] = useState<boolean>(false);
+  const [showLogMaintenanceForm, setShowLogMaintenanceForm] =
+    useState<boolean>(false);
 
   // Maintenance form state
-  const [maintType, setMaintType] = useState<MaintenanceEventType>("INSPECTION");
-  const [maintOutcome, setMaintOutcome] = useState<MaintenanceOutcome>("COMPLETED");
+  const [maintType, setMaintType] =
+    useState<MaintenanceEventType>("INSPECTION");
+  const [maintOutcome, setMaintOutcome] =
+    useState<MaintenanceOutcome>("COMPLETED");
   const [maintPerformedBy, setMaintPerformedBy] = useState<string>("");
   const [maintNotes, setMaintNotes] = useState<string>("");
   const [savingMaint, setSavingMaint] = useState<boolean>(false);
@@ -427,16 +455,33 @@ export default function InfrastructureHealth() {
   const [newAssetCode, setNewAssetCode] = useState<string>("");
   const [newAssetName, setNewAssetName] = useState<string>("");
   const [newAssetType, setNewAssetType] = useState<AssetType>("ROAD_SEGMENT");
-  const [newAssetCity, setNewAssetCity] = useState<string>("Hyderabad");
-  const [newAssetWard, setNewAssetWard] = useState<string>("Ward 12 · Banjara Hills");
-  const [newAssetZone, setNewAssetZone] = useState<string>("Central Zone");
   const [newAssetAddress, setNewAssetAddress] = useState<string>("");
-  const [newAssetLat, setNewAssetLat] = useState<string>("17.4156");
-  const [newAssetLng, setNewAssetLng] = useState<string>("78.4357");
   const [newAssetRadius, setNewAssetRadius] = useState<string>("250");
   const [newAssetLastMaint, setNewAssetLastMaint] = useState<string>("");
   const [creatingAsset, setCreatingAsset] = useState<boolean>(false);
   const [createAssetError, setCreateAssetError] = useState<string | null>(null);
+
+  // Map picker state (source of truth for location)
+  const [pickedLocation, setPickedLocation] = useState<{
+    latitude: number;
+    longitude: number;
+  } | null>(null);
+
+  // Administrative geography resolution state
+  const [geoResolving, setGeoResolving] = useState<boolean>(false);
+  const [resolvedGeo, setResolvedGeo] = useState<{
+    city: string | null;
+    ward: string | null;
+    zone: string | null;
+    wardId: string | null;
+    zoneId: string | null;
+    municipalityId: string | null;
+    boundaryVersionId: string | null;
+    resolved: boolean;
+  } | null>(null);
+  const [geoResolveError, setGeoResolveError] = useState<string | null>(null);
+  // Track the latest resolution request to discard stale responses
+  const geoResolveSeq = useRef(0);
 
   async function loadCities() {
     try {
@@ -458,7 +503,9 @@ export default function InfrastructureHealth() {
     } catch (err) {
       if (seq === detailsReqSeq.current) {
         setError(
-          err instanceof Error ? err.message : "Failed to load infrastructure asset details.",
+          err instanceof Error
+            ? err.message
+            : "Failed to load infrastructure asset details.",
         );
       }
     } finally {
@@ -476,19 +523,30 @@ export default function InfrastructureHealth() {
     try {
       const [data, metricsRes] = await Promise.all([
         api.getInfrastructureHealth({
-          city: activeFilters.selectedCity !== "all" ? activeFilters.selectedCity : undefined,
-          ward: activeFilters.selectedWard !== "all" ? activeFilters.selectedWard : undefined,
+          city:
+            activeFilters.selectedCity !== "all"
+              ? activeFilters.selectedCity
+              : undefined,
+          ward:
+            activeFilters.selectedWard !== "all"
+              ? activeFilters.selectedWard
+              : undefined,
           assetType:
             activeFilters.assetTypeFilter !== "all"
               ? activeFilters.assetTypeFilter
               : undefined,
-          grade: activeFilters.gradeFilter !== "all" ? activeFilters.gradeFilter : undefined,
+          grade:
+            activeFilters.gradeFilter !== "all"
+              ? activeFilters.gradeFilter
+              : undefined,
           sortBy: activeFilters.sortBy,
           limit: 100,
         }),
         api
           .getInfrastructureMetrics(
-            activeFilters.selectedCity !== "all" ? activeFilters.selectedCity : undefined,
+            activeFilters.selectedCity !== "all"
+              ? activeFilters.selectedCity
+              : undefined,
           )
           .catch(() => null),
       ]);
@@ -502,7 +560,7 @@ export default function InfrastructureHealth() {
           ? preferredAssetId
           : selectedAssetId && data.assets.some((a) => a.id === selectedAssetId)
             ? selectedAssetId
-            : data.assets[0]?.id ?? null;
+            : (data.assets[0]?.id ?? null);
 
       setSelectedAssetId(targetId);
       if (targetId) {
@@ -555,7 +613,9 @@ export default function InfrastructureHealth() {
       await loadOverview(selectedAssetId);
     } catch (err) {
       setError(
-        err instanceof Error ? err.message : "Failed to recalculate infrastructure scores.",
+        err instanceof Error
+          ? err.message
+          : "Failed to recalculate infrastructure scores.",
       );
     } finally {
       setRecomputing(false);
@@ -587,7 +647,9 @@ export default function InfrastructureHealth() {
       await loadOverview(selectedAssetId);
     } catch (err) {
       setMaintError(
-        err instanceof Error ? err.message : "Failed to record maintenance event.",
+        err instanceof Error
+          ? err.message
+          : "Failed to record maintenance event.",
       );
     } finally {
       setSavingMaint(false);
@@ -599,24 +661,26 @@ export default function InfrastructureHealth() {
     setCreatingAsset(true);
     setCreateAssetError(null);
 
-    const latNum = Number(newAssetLat);
-    const lngNum = Number(newAssetLng);
-    const radiusNum = Number(newAssetRadius || "250");
-
-    if (!Number.isFinite(latNum) || !Number.isFinite(lngNum)) {
-      setCreateAssetError("Latitude and longitude must be valid coordinates.");
+    if (!pickedLocation) {
+      setCreateAssetError(
+        "Please select a location on the map before registering.",
+      );
       setCreatingAsset(false);
       return;
     }
+
+    const latNum = pickedLocation.latitude;
+    const lngNum = pickedLocation.longitude;
+    const radiusNum = Number(newAssetRadius || "250");
 
     try {
       const created = await api.createInfrastructureAsset({
         assetCode: newAssetCode.trim().toUpperCase(),
         name: newAssetName.trim(),
         assetType: newAssetType,
-        city: newAssetCity.trim() || null,
-        ward: newAssetWard.trim() || null,
-        zone: newAssetZone.trim() || null,
+        city: resolvedGeo?.city ?? null,
+        ward: resolvedGeo?.ward ?? null,
+        zone: resolvedGeo?.zone ?? null,
         address: newAssetAddress.trim() || null,
         latitude: latNum,
         longitude: lngNum,
@@ -631,6 +695,9 @@ export default function InfrastructureHealth() {
       setNewAssetName("");
       setNewAssetAddress("");
       setNewAssetLastMaint("");
+      setPickedLocation(null);
+      setResolvedGeo(null);
+      setGeoResolveError(null);
       setViewMode("assets");
       setNotice(
         `Registered ${created.asset.assetCode} (${created.asset.name}) with initial health score ${created.asset.healthScore}/100 (${created.asset.healthGrade}).`,
@@ -639,23 +706,47 @@ export default function InfrastructureHealth() {
       await loadOverview(created.asset.id);
     } catch (err) {
       setCreateAssetError(
-        err instanceof Error ? err.message : "Failed to register infrastructure asset.",
+        err instanceof Error
+          ? err.message
+          : "Failed to register infrastructure asset.",
       );
     } finally {
       setCreatingAsset(false);
     }
   }
 
-  function applyCityPreset(cityName: string) {
-    setNewAssetCity(cityName);
-    const preset = CITY_CENTER_PRESETS[cityName];
-    if (preset) {
-      setNewAssetLat(preset.lat);
-      setNewAssetLng(preset.lng);
-      setNewAssetWard(preset.ward);
-      setNewAssetZone(preset.zone);
-    }
-  }
+  /**
+   * Resolve administrative geography when the officer picks a map location.
+   * Uses an AbortController-equivalent sequence counter to discard stale results.
+   */
+  const handleLocationPick = useCallback(
+    async (loc: { latitude: number; longitude: number }) => {
+      setPickedLocation(loc);
+      // Clear stale administrative data immediately
+      setResolvedGeo(null);
+      setGeoResolveError(null);
+      setGeoResolving(true);
+
+      const seq = ++geoResolveSeq.current;
+      try {
+        const result = await api.resolveAdminGeography(
+          loc.latitude,
+          loc.longitude,
+        );
+        if (seq !== geoResolveSeq.current) return; // Stale — a newer pick superseded this one
+        setResolvedGeo(result);
+      } catch {
+        if (seq !== geoResolveSeq.current) return;
+        setGeoResolveError("Location outside supported coverage area.");
+        setResolvedGeo(null);
+      } finally {
+        if (seq === geoResolveSeq.current) {
+          setGeoResolving(false);
+        }
+      }
+    },
+    [],
+  );
 
   const availableCities = useMemo(() => {
     const names = new Set<string>();
@@ -676,7 +767,8 @@ export default function InfrastructureHealth() {
     for (const w of overview?.wards || []) {
       if (
         w.ward &&
-        (selectedCity === "all" || (w.city || "").toLowerCase() === selectedCity.toLowerCase())
+        (selectedCity === "all" ||
+          (w.city || "").toLowerCase() === selectedCity.toLowerCase())
       ) {
         names.add(w.ward);
       }
@@ -691,17 +783,31 @@ export default function InfrastructureHealth() {
       if (conditionFilter === "deteriorating" && a.trend !== "DETERIORATING") {
         return false;
       }
-      if (conditionFilter === "overdue" && (a.maintenanceAgeMonths == null || a.maintenanceAgeMonths < 6)) {
+      if (
+        conditionFilter === "overdue" &&
+        (a.maintenanceAgeMonths == null || a.maintenanceAgeMonths < 6)
+      ) {
         return false;
       }
-      if (conditionFilter === "cross_impact" && (a.scoreBreakdown?.factors?.crossImpactCount ?? 0) === 0) {
+      if (
+        conditionFilter === "cross_impact" &&
+        (a.scoreBreakdown?.factors?.crossImpactCount ?? 0) === 0
+      ) {
         return false;
       }
       if (minOpenIssues > 0 && (a.openComplaintCount ?? 0) < minOpenIssues) {
         return false;
       }
       if (!q) return true;
-      return [a.assetCode, a.name, a.ward, a.city, a.address, a.department, a.assetTypeLabel]
+      return [
+        a.assetCode,
+        a.name,
+        a.ward,
+        a.city,
+        a.address,
+        a.department,
+        a.assetTypeLabel,
+      ]
         .filter(Boolean)
         .some((v) => String(v).toLowerCase().includes(q));
     });
@@ -728,7 +834,8 @@ export default function InfrastructureHealth() {
     }
     if (assetTypeFilter !== "all") {
       const lbl =
-        ASSET_TYPE_OPTIONS.find((o) => o.value === assetTypeFilter)?.shortLabel || assetTypeFilter;
+        ASSET_TYPE_OPTIONS.find((o) => o.value === assetTypeFilter)
+          ?.shortLabel || assetTypeFilter;
       chips.push({
         key: "type",
         label: `Type: ${lbl}`,
@@ -763,7 +870,8 @@ export default function InfrastructureHealth() {
       });
     }
     if (sortBy !== "lowest_health") {
-      const sLbl = SORT_OPTIONS.find((s) => s.value === sortBy)?.label || sortBy;
+      const sLbl =
+        SORT_OPTIONS.find((s) => s.value === sortBy)?.label || sortBy;
       chips.push({
         key: "sort",
         label: `Sort: ${sLbl}`,
@@ -771,7 +879,15 @@ export default function InfrastructureHealth() {
       });
     }
     return chips;
-  }, [selectedCity, selectedWard, assetTypeFilter, gradeFilter, conditionFilter, minOpenIssues, sortBy]);
+  }, [
+    selectedCity,
+    selectedWard,
+    assetTypeFilter,
+    gradeFilter,
+    conditionFilter,
+    minOpenIssues,
+    sortBy,
+  ]);
 
   function handleResetFilters() {
     setSelectedCity("all");
@@ -818,7 +934,9 @@ export default function InfrastructureHealth() {
             Infrastructure Health Scores
           </h1>
           <p className="text-sm font-medium text-ink-soft">
-            Deterministic 0–100 health ratings combining citizen complaint pressure, recurrence &amp; overlap, severity, resolution lag, and maintenance age.
+            Deterministic 0–100 health ratings combining citizen complaint
+            pressure, recurrence &amp; overlap, severity, resolution lag, and
+            maintenance age.
           </p>
         </div>
 
@@ -844,16 +962,16 @@ export default function InfrastructureHealth() {
             disabled={recomputing || loading}
             className="inline-flex items-center gap-1.5 rounded-xl border border-indigo-200 bg-indigo-50/85 px-3.5 py-2 text-xs font-bold text-indigo-800 shadow-sm transition hover:bg-indigo-100 disabled:opacity-60 cursor-pointer"
           >
-            <ArrowsClockwise size={14} className={recomputing ? "animate-spin" : ""} />
+            <ArrowsClockwise
+              size={14}
+              className={recomputing ? "animate-spin" : ""}
+            />
             {recomputing ? "Recalculating…" : "Recalculate Scores"}
           </button>
 
           <button
             type="button"
             onClick={() => {
-              if (selectedCity !== "all") {
-                applyCityPreset(selectedCity);
-              }
               setShowCreateModal(true);
             }}
             className="ios-btn-primary inline-flex items-center gap-1.5 px-4 py-2 text-xs font-bold text-white cursor-pointer"
@@ -933,7 +1051,9 @@ export default function InfrastructureHealth() {
                         {item.cap}
                       </span>
                     </div>
-                    <p className="mt-1 text-[11px] leading-snug text-ink-soft">{item.desc}</p>
+                    <p className="mt-1 text-[11px] leading-snug text-ink-soft">
+                      {item.desc}
+                    </p>
                   </div>
                 ))}
               </div>
@@ -942,50 +1062,73 @@ export default function InfrastructureHealth() {
                 <div className="mt-3 grid gap-2 border-t border-indigo-100 pt-3 sm:grid-cols-4">
                   <div className="rounded-xl border border-white/80 bg-white/75 px-3 py-2">
                     <span className="block text-[10px] font-bold uppercase text-ink-soft">
-                      Maint Label Alignment
+                      Maintenance Status Consistency
                     </span>
                     <span className="mt-0.5 block font-mono text-sm font-extrabold text-indigo-800">
-                      {infraMetrics.labelAlignment.maintenanceAlignmentPercent ?? 100}%
+                      {infraMetrics.labelAlignment
+                        .maintenanceAlignmentPercent ?? 100}
+                      %
                     </span>
                     <span className="text-[10px] text-ink-soft">
                       {infraMetrics.labelAlignment.overdueSubHealthyCount}/
-                      {infraMetrics.labelAlignment.overdueMaintenanceCount} overdue assets &lt; 80
+                      {infraMetrics.labelAlignment.overdueMaintenanceCount}{" "}
+                      overdue assets &lt; 80
                     </span>
                   </div>
                   <div className="rounded-xl border border-white/80 bg-white/75 px-3 py-2">
                     <span className="block text-[10px] font-bold uppercase text-ink-soft">
-                      What-If: Resolve Open
+                      Potential Improvement: Resolve Complaints
                     </span>
                     <span className="mt-0.5 block font-mono text-sm font-extrabold text-emerald-700">
-                      +{infraMetrics.sensitivityAnalysis.deltaResolveOpenPts.toFixed(1)} pts
+                      +
+                      {infraMetrics.sensitivityAnalysis.deltaResolveOpenPts.toFixed(
+                        1,
+                      )}{" "}
+                      pts
                     </span>
                     <span className="text-[10px] text-ink-soft">
                       Fleet avg rises to{" "}
-                      {infraMetrics.sensitivityAnalysis.whatIfResolveAllOpenAvgHealth}
+                      {
+                        infraMetrics.sensitivityAnalysis
+                          .whatIfResolveAllOpenAvgHealth
+                      }
                     </span>
                   </div>
                   <div className="rounded-xl border border-white/80 bg-white/75 px-3 py-2">
                     <span className="block text-[10px] font-bold uppercase text-ink-soft">
-                      What-If: Complete Maint
+                      Potential Improvement: Complete Maintenance
                     </span>
                     <span className="mt-0.5 block font-mono text-sm font-extrabold text-blue-700">
-                      +{infraMetrics.sensitivityAnalysis.deltaCompleteMaintenancePts.toFixed(1)} pts
+                      +
+                      {infraMetrics.sensitivityAnalysis.deltaCompleteMaintenancePts.toFixed(
+                        1,
+                      )}{" "}
+                      pts
                     </span>
                     <span className="text-[10px] text-ink-soft">
                       Fleet avg rises to{" "}
-                      {infraMetrics.sensitivityAnalysis.whatIfCompleteMaintenanceAvgHealth}
+                      {
+                        infraMetrics.sensitivityAnalysis
+                          .whatIfCompleteMaintenanceAvgHealth
+                      }
                     </span>
                   </div>
                   <div className="rounded-xl border border-white/80 bg-white/75 px-3 py-2">
                     <span className="block text-[10px] font-bold uppercase text-ink-soft">
-                      Mean Active Penalties
+                      Average Health Points Lost
                     </span>
                     <span className="mt-0.5 block font-mono text-sm font-extrabold text-rose-700">
-                      -{infraMetrics.averagePenalties.totalPenalty.toFixed(1)} pts
+                      -{infraMetrics.averagePenalties.totalPenalty.toFixed(1)}{" "}
+                      pts
                     </span>
                     <span className="text-[10px] text-ink-soft">
-                      Top drag: Maint (-{infraMetrics.averagePenalties.maintenanceAgePenalty.toFixed(1)}) ·
-                      Sev (-{infraMetrics.averagePenalties.severityPenalty.toFixed(1)})
+                      Top drag: Maint (-
+                      {infraMetrics.averagePenalties.maintenanceAgePenalty.toFixed(
+                        1,
+                      )}
+                      ) · Sev (-
+                      {infraMetrics.averagePenalties.severityPenalty.toFixed(1)}
+                      )
                     </span>
                   </div>
                 </div>
@@ -999,7 +1142,11 @@ export default function InfrastructureHealth() {
       {notice && (
         <div className="flex items-center justify-between gap-2 rounded-xl border border-emerald-300/70 bg-emerald-500/15 px-4 py-2.5 text-xs font-semibold text-emerald-900">
           <div className="flex items-center gap-2">
-            <CheckCircle size={16} weight="fill" className="shrink-0 text-emerald-700" />
+            <CheckCircle
+              size={16}
+              weight="fill"
+              className="shrink-0 text-emerald-700"
+            />
             <span>{notice}</span>
           </div>
           <button
@@ -1018,7 +1165,11 @@ export default function InfrastructureHealth() {
           role="alert"
           className="flex items-center gap-2.5 rounded-xl border border-rose-300/70 bg-rose-500/15 px-4 py-3 text-xs font-semibold text-rose-900"
         >
-          <WarningCircle size={18} weight="fill" className="shrink-0 text-rose-700" />
+          <WarningCircle
+            size={18}
+            weight="fill"
+            className="shrink-0 text-rose-700"
+          />
           <span>{error}</span>
         </div>
       )}
@@ -1054,7 +1205,11 @@ export default function InfrastructureHealth() {
             <span className="text-[11px] font-bold uppercase tracking-wider text-ink-soft">
               Monitored Assets
             </span>
-            <ShieldCheck size={18} weight="duotone" className="text-indigo-600" />
+            <ShieldCheck
+              size={18}
+              weight="duotone"
+              className="text-indigo-600"
+            />
           </div>
           <div className="mt-2 flex items-baseline gap-2">
             <span className="font-mono text-2xl font-extrabold text-ink">
@@ -1071,7 +1226,11 @@ export default function InfrastructureHealth() {
             <span className="text-[11px] font-bold uppercase tracking-wider text-ink-soft">
               Critical &amp; Poor
             </span>
-            <WarningCircle size={18} weight="duotone" className="text-rose-600" />
+            <WarningCircle
+              size={18}
+              weight="duotone"
+              className="text-rose-600"
+            />
           </div>
           <div className="mt-2 flex items-baseline gap-2">
             <span className="font-mono text-2xl font-extrabold text-rose-700">
@@ -1228,7 +1387,9 @@ export default function InfrastructureHealth() {
             </label>
             <select
               value={assetTypeFilter}
-              onChange={(e) => setAssetTypeFilter(e.target.value as "all" | AssetType)}
+              onChange={(e) =>
+                setAssetTypeFilter(e.target.value as "all" | AssetType)
+              }
               aria-label="Filter by asset category"
               className="glass-input px-3 py-2 text-xs font-semibold cursor-pointer"
             >
@@ -1247,7 +1408,9 @@ export default function InfrastructureHealth() {
             </label>
             <select
               value={gradeFilter}
-              onChange={(e) => setGradeFilter(e.target.value as "all" | HealthGrade)}
+              onChange={(e) =>
+                setGradeFilter(e.target.value as "all" | HealthGrade)
+              }
               aria-label="Filter by health grade"
               className="glass-input px-3 py-2 text-xs font-semibold cursor-pointer"
             >
@@ -1268,7 +1431,11 @@ export default function InfrastructureHealth() {
               value={conditionFilter}
               onChange={(e) =>
                 setConditionFilter(
-                  e.target.value as "all" | "deteriorating" | "overdue" | "cross_impact",
+                  e.target.value as
+                    | "all"
+                    | "deteriorating"
+                    | "overdue"
+                    | "cross_impact",
                 )
               }
               aria-label="Filter by condition pattern"
@@ -1277,7 +1444,9 @@ export default function InfrastructureHealth() {
               <option value="all">All Conditions</option>
               <option value="deteriorating">Deteriorating Trend Only</option>
               <option value="overdue">Overdue Maintenance (≥ 6 mo)</option>
-              <option value="cross_impact">Has Cross-Infrastructure Impact</option>
+              <option value="cross_impact">
+                Has Cross-Infrastructure Impact
+              </option>
             </select>
           </div>
 
@@ -1464,12 +1633,15 @@ export default function InfrastructureHealth() {
           <div className="glass-panel flex flex-col gap-3 p-4">
             <div className="flex items-center justify-between px-0.5 text-[11px] font-bold uppercase tracking-wider text-ink-soft">
               <span>Assets ({filteredAssets.length})</span>
-              <span className="font-normal normal-case">Click card to inspect score &amp; repairs</span>
+              <span className="font-normal normal-case">
+                Click card to inspect score &amp; repairs
+              </span>
             </div>
 
             {filteredAssets.length === 0 ? (
               <div className="rounded-2xl border border-dashed border-white/70 bg-white/40 px-4 py-10 text-center text-xs text-ink-soft">
-                No infrastructure assets matched the current filters. Try clearing a grade/city filter or register a new asset.
+                No infrastructure assets matched the current filters. Try
+                clearing a grade/city filter or register a new asset.
               </div>
             ) : (
               <div className="flex max-h-[760px] flex-col gap-2.5 overflow-y-auto pr-1">
@@ -1479,7 +1651,8 @@ export default function InfrastructureHealth() {
                   const trendBadge = getTrendBadge(asset.trend);
                   const TrendIcon = trendBadge.icon;
                   const AssetIcon = getAssetTypeIcon(asset.assetType);
-                  const crossCount = asset.scoreBreakdown?.factors?.crossImpactCount ?? 0;
+                  const crossCount =
+                    asset.scoreBreakdown?.factors?.crossImpactCount ?? 0;
 
                   return (
                     <button
@@ -1540,7 +1713,9 @@ export default function InfrastructureHealth() {
                       <div className="h-1.5 w-full overflow-hidden rounded-full bg-slate-200/80">
                         <div
                           className={`h-full rounded-full transition-all duration-500 ${gradeTheme.barFill}`}
-                          style={{ width: `${Math.max(4, asset.healthScore)}%` }}
+                          style={{
+                            width: `${Math.max(4, asset.healthScore)}%`,
+                          }}
                         />
                       </div>
 
@@ -1556,7 +1731,10 @@ export default function InfrastructureHealth() {
                             {crossCount} cross-impact
                           </span>
                         )}
-                        <span>Maint: {formatMaintenanceAge(asset.maintenanceAgeMonths)}</span>
+                        <span>
+                          Maint:{" "}
+                          {formatMaintenanceAge(asset.maintenanceAgeMonths)}
+                        </span>
                       </div>
                     </button>
                   );
@@ -1569,12 +1747,17 @@ export default function InfrastructureHealth() {
           <div className="glass-panel flex flex-col gap-5 p-5 sm:p-6 xl:sticky xl:top-24">
             {loadingDetails ? (
               <div className="flex items-center justify-center gap-2 py-16 text-xs font-medium text-ink-soft">
-                <ArrowsClockwise size={16} className="animate-spin text-primary" />
+                <ArrowsClockwise
+                  size={16}
+                  className="animate-spin text-primary"
+                />
                 Loading asset condition breakdown…
               </div>
             ) : !activeAsset ? (
               <div className="py-16 text-center text-xs text-ink-soft">
-                Select an infrastructure asset on the left to inspect its deterministic health breakdown, linked citizen complaints, and maintenance history.
+                Select an infrastructure asset on the left to inspect its
+                deterministic health breakdown, linked citizen complaints, and
+                maintenance history.
               </div>
             ) : (
               <>
@@ -1621,7 +1804,11 @@ export default function InfrastructureHealth() {
                     <p className="flex min-w-0 flex-1 items-center gap-1.5 text-xs text-ink-soft">
                       <MapPin size={13} className="shrink-0 text-primary" />
                       <span className="truncate">
-                        {[activeAsset.address, activeAsset.ward, activeAsset.city]
+                        {[
+                          activeAsset.address,
+                          activeAsset.ward,
+                          activeAsset.city,
+                        ]
                           .filter(Boolean)
                           .join(" · ")}
                       </span>
@@ -1644,19 +1831,20 @@ export default function InfrastructureHealth() {
                         Investigate in Graph
                       </Link>
 
-                      {activeAsset.latitude != null && activeAsset.longitude != null && (
-                        <Link
-                          to={`/officer/spatial-intelligence?city=${encodeURIComponent(
-                            activeAsset.city || "all",
-                          )}&lat=${activeAsset.latitude}&lng=${activeAsset.longitude}&ward=${encodeURIComponent(
-                            activeAsset.ward || "",
-                          )}&ref=${encodeURIComponent(activeAsset.assetCode)}`}
-                          className="inline-flex items-center gap-1.5 rounded-xl border border-blue-200 bg-blue-50/85 px-3 py-1.5 text-xs font-bold text-primary transition hover:bg-blue-100"
-                        >
-                          <Crosshair size={13} weight="bold" />
-                          Focus on Map
-                        </Link>
-                      )}
+                      {activeAsset.latitude != null &&
+                        activeAsset.longitude != null && (
+                          <Link
+                            to={`/officer/spatial-intelligence?city=${encodeURIComponent(
+                              activeAsset.city || "all",
+                            )}&lat=${activeAsset.latitude}&lng=${activeAsset.longitude}&ward=${encodeURIComponent(
+                              activeAsset.ward || "",
+                            )}&ref=${encodeURIComponent(activeAsset.assetCode)}`}
+                            className="inline-flex items-center gap-1.5 rounded-xl border border-blue-200 bg-blue-50/85 px-3 py-1.5 text-xs font-bold text-primary transition hover:bg-blue-100"
+                          >
+                            <Crosshair size={13} weight="bold" />
+                            Focus on Map
+                          </Link>
+                        )}
 
                       <button
                         type="button"
@@ -1667,7 +1855,9 @@ export default function InfrastructureHealth() {
                         className="inline-flex items-center gap-1.5 rounded-xl bg-primary px-3 py-1.5 text-xs font-bold text-white shadow-sm transition hover:bg-primary-strong cursor-pointer"
                       >
                         <Wrench size={13} weight="bold" />
-                        {showLogMaintenanceForm ? "Close Form" : "Log Maintenance"}
+                        {showLogMaintenanceForm
+                          ? "Close Form"
+                          : "Log Maintenance"}
                       </button>
                     </div>
                   </div>
@@ -1719,10 +1909,15 @@ export default function InfrastructureHealth() {
                     <span className="font-mono text-xs font-bold text-ink-soft">
                       100 −{" "}
                       <span className="text-rose-700">
-                        {Number(breakdown.totalPenalty ?? 100 - activeAsset.healthScore).toFixed(1)}
+                        {Number(
+                          breakdown.totalPenalty ??
+                            100 - activeAsset.healthScore,
+                        ).toFixed(1)}
                       </span>{" "}
                       ={" "}
-                      <span className={getGradeTheme(activeAsset.healthGrade).text}>
+                      <span
+                        className={getGradeTheme(activeAsset.healthGrade).text}
+                      >
                         {activeAsset.healthScore} / 100
                       </span>
                     </span>
@@ -1735,7 +1930,8 @@ export default function InfrastructureHealth() {
                         val: Number(breakdown.complaintImpactPenalty ?? 0),
                         max: caps.complaintImpact,
                         hint: `${breakdown.factors?.directCount ?? 0} direct · ${
-                          breakdown.factors?.openCount ?? activeAsset.openComplaintCount
+                          breakdown.factors?.openCount ??
+                          activeAsset.openComplaintCount
                         } open`,
                       },
                       {
@@ -1743,7 +1939,9 @@ export default function InfrastructureHealth() {
                         val: Number(breakdown.recurrencePenalty ?? 0),
                         max: caps.recurrence,
                         hint: `${breakdown.factors?.crossImpactCount ?? 0} cross-impact${
-                          breakdown.factors?.inActiveHotspot ? " · in active hotspot" : ""
+                          breakdown.factors?.inActiveHotspot
+                            ? " · in active hotspot"
+                            : ""
                         }`,
                       },
                       {
@@ -1771,19 +1969,26 @@ export default function InfrastructureHealth() {
                         )}`,
                       },
                     ].map((row) => {
-                      const pct = Math.min(100, Math.round((row.val / row.max) * 100));
+                      const pct = Math.min(
+                        100,
+                        Math.round((row.val / row.max) * 100),
+                      );
                       return (
                         <div key={row.label}>
                           <div className="flex items-center justify-between gap-2 text-xs">
                             <div>
-                              <span className="font-bold text-ink">{row.label}</span>
+                              <span className="font-bold text-ink">
+                                {row.label}
+                              </span>
                               <span className="ml-2 text-[11px] text-ink-soft">
                                 ({row.hint})
                               </span>
                             </div>
                             <span className="font-mono text-xs font-extrabold text-ink">
                               -{row.val.toFixed(1)}{" "}
-                              <span className="font-normal text-ink-soft">/ {row.max}</span>
+                              <span className="font-normal text-ink-soft">
+                                / {row.max}
+                              </span>
                             </span>
                           </div>
                           <div className="mt-1 h-2 w-full overflow-hidden rounded-full bg-slate-200/80">
@@ -1814,7 +2019,8 @@ export default function InfrastructureHealth() {
                   >
                     <div className="flex items-center gap-2">
                       <span className="text-xs font-extrabold uppercase tracking-wider text-ink">
-                        Linked Citizen Complaints ({assetDetails?.linkedComplaints.length ?? 0})
+                        Linked Citizen Complaints (
+                        {assetDetails?.linkedComplaints.length ?? 0})
                       </span>
                       {(breakdown.factors?.crossImpactCount ?? 0) > 0 && (
                         <span className="rounded-full border border-amber-300 bg-amber-500/15 px-2 py-0.5 text-[10px] font-bold text-amber-900">
@@ -1841,9 +2047,11 @@ export default function InfrastructureHealth() {
                         className="overflow-hidden border-t border-white/60"
                       >
                         <div className="flex flex-col gap-2.5 p-4">
-                          {(assetDetails?.linkedComplaints || []).length === 0 ? (
+                          {(assetDetails?.linkedComplaints || []).length ===
+                          0 ? (
                             <p className="text-xs text-ink-soft">
-                              No citizen complaints currently fall within this asset&apos;s catchment area.
+                              No citizen complaints currently fall within this
+                              asset&apos;s catchment area.
                             </p>
                           ) : (
                             (assetDetails?.linkedComplaints || []).map((c) => (
@@ -1881,9 +2089,13 @@ export default function InfrastructureHealth() {
                                       : ""}
                                   </span>
                                 </div>
-                                <p className="text-xs font-bold text-ink">{c.title}</p>
+                                <p className="text-xs font-bold text-ink">
+                                  {c.title}
+                                </p>
                                 {c.linkReason && (
-                                  <p className="text-[11px] text-ink-soft">{c.linkReason}</p>
+                                  <p className="text-[11px] text-ink-soft">
+                                    {c.linkReason}
+                                  </p>
                                 )}
                               </Link>
                             ))
@@ -1929,7 +2141,9 @@ export default function InfrastructureHealth() {
                         <div className="flex flex-col gap-3 p-4">
                           {showLogMaintenanceForm && (
                             <form
-                              onSubmit={(e) => void handleLogMaintenanceSubmit(e)}
+                              onSubmit={(e) =>
+                                void handleLogMaintenanceSubmit(e)
+                              }
                               className="rounded-xl border border-indigo-200 bg-indigo-50/60 p-3.5 space-y-3"
                             >
                               <div className="flex items-center justify-between">
@@ -1938,7 +2152,9 @@ export default function InfrastructureHealth() {
                                 </p>
                                 <button
                                   type="button"
-                                  onClick={() => setShowLogMaintenanceForm(false)}
+                                  onClick={() =>
+                                    setShowLogMaintenanceForm(false)
+                                  }
                                   className="text-[11px] font-semibold text-ink-soft hover:text-ink cursor-pointer"
                                 >
                                   Cancel
@@ -1957,7 +2173,9 @@ export default function InfrastructureHealth() {
                                   <select
                                     value={maintType}
                                     onChange={(e) =>
-                                      setMaintType(e.target.value as MaintenanceEventType)
+                                      setMaintType(
+                                        e.target.value as MaintenanceEventType,
+                                      )
                                     }
                                     className="glass-input mt-1 w-full px-2.5 py-1.5 text-xs font-semibold"
                                   >
@@ -1994,7 +2212,9 @@ export default function InfrastructureHealth() {
                                 <input
                                   type="text"
                                   value={maintPerformedBy}
-                                  onChange={(e) => setMaintPerformedBy(e.target.value)}
+                                  onChange={(e) =>
+                                    setMaintPerformedBy(e.target.value)
+                                  }
                                   placeholder="e.g. Ward 12 Road Crew"
                                   className="glass-input mt-1 w-full px-2.5 py-1.5 text-xs"
                                 />
@@ -2005,7 +2225,9 @@ export default function InfrastructureHealth() {
                                 <textarea
                                   rows={2}
                                   value={maintNotes}
-                                  onChange={(e) => setMaintNotes(e.target.value)}
+                                  onChange={(e) =>
+                                    setMaintNotes(e.target.value)
+                                  }
                                   placeholder="Describe repairs completed, resurfacing depth, valve replacement, etc."
                                   className="glass-input mt-1 w-full px-2.5 py-1.5 text-xs"
                                 />
@@ -2017,52 +2239,60 @@ export default function InfrastructureHealth() {
                                   disabled={savingMaint}
                                   className="inline-flex items-center gap-1.5 rounded-xl bg-primary px-4 py-1.5 text-xs font-bold text-white shadow-sm hover:bg-primary-strong disabled:opacity-60 cursor-pointer"
                                 >
-                                  {savingMaint ? "Saving & Re-scoring…" : "Submit Event"}
+                                  {savingMaint
+                                    ? "Saving & Re-scoring…"
+                                    : "Submit Event"}
                                 </button>
                               </div>
                             </form>
                           )}
 
-                          {(assetDetails?.maintenanceEvents || []).length === 0 ? (
+                          {(assetDetails?.maintenanceEvents || []).length ===
+                          0 ? (
                             <p className="text-xs text-ink-soft">
                               No maintenance events recorded yet for this asset.
                             </p>
                           ) : (
                             <div className="space-y-2">
-                              {(assetDetails?.maintenanceEvents || []).map((ev) => (
-                                <div
-                                  key={ev.id}
-                                  className="rounded-xl border border-white/80 bg-white/75 px-3 py-2.5 text-xs"
-                                >
-                                  <div className="flex flex-wrap items-center justify-between gap-2">
-                                    <div className="flex items-center gap-1.5">
-                                      <span className="font-bold text-ink">
-                                        {ev.eventType.replace(/_/g, " ")}
-                                      </span>
-                                      <span
-                                        className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${
-                                          ev.outcome === "COMPLETED"
-                                            ? "bg-emerald-500/15 text-emerald-800"
-                                            : ev.outcome === "FAILED_INSPECTION"
-                                              ? "bg-rose-500/15 text-rose-800"
-                                              : "bg-amber-500/15 text-amber-800"
-                                        }`}
-                                      >
-                                        {ev.outcome.replace(/_/g, " ")}
+                              {(assetDetails?.maintenanceEvents || []).map(
+                                (ev) => (
+                                  <div
+                                    key={ev.id}
+                                    className="rounded-xl border border-white/80 bg-white/75 px-3 py-2.5 text-xs"
+                                  >
+                                    <div className="flex flex-wrap items-center justify-between gap-2">
+                                      <div className="flex items-center gap-1.5">
+                                        <span className="font-bold text-ink">
+                                          {ev.eventType.replace(/_/g, " ")}
+                                        </span>
+                                        <span
+                                          className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${
+                                            ev.outcome === "COMPLETED"
+                                              ? "bg-emerald-500/15 text-emerald-800"
+                                              : ev.outcome ===
+                                                  "FAILED_INSPECTION"
+                                                ? "bg-rose-500/15 text-rose-800"
+                                                : "bg-amber-500/15 text-amber-800"
+                                          }`}
+                                        >
+                                          {ev.outcome.replace(/_/g, " ")}
+                                        </span>
+                                      </div>
+                                      <span className="text-[11px] text-ink-soft">
+                                        {formatDateShort(ev.performedAt)}
                                       </span>
                                     </div>
-                                    <span className="text-[11px] text-ink-soft">
-                                      {formatDateShort(ev.performedAt)}
-                                    </span>
+                                    {ev.notes && (
+                                      <p className="mt-1 text-[11px] text-ink-soft">
+                                        {ev.notes}
+                                      </p>
+                                    )}
+                                    <p className="mt-1 text-[10px] font-semibold text-ink-soft">
+                                      By {ev.performedBy}
+                                    </p>
                                   </div>
-                                  {ev.notes && (
-                                    <p className="mt-1 text-[11px] text-ink-soft">{ev.notes}</p>
-                                  )}
-                                  <p className="mt-1 text-[10px] font-semibold text-ink-soft">
-                                    By {ev.performedBy}
-                                  </p>
-                                </div>
-                              ))}
+                                ),
+                              )}
                             </div>
                           )}
 
@@ -2077,17 +2307,19 @@ export default function InfrastructureHealth() {
                                 history={assetDetails?.healthHistory || []}
                               />
                               <div className="flex flex-wrap gap-1.5">
-                                {assetDetails?.healthHistory.slice(0, 6).map((h) => (
-                                  <span
-                                    key={h.id}
-                                    className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 font-mono text-[10px] font-bold ${
-                                      getGradeTheme(h.healthGrade).badge
-                                    }`}
-                                  >
-                                    {h.healthScore} ({h.healthGrade}) ·{" "}
-                                    {formatDateShort(h.recordedAt)}
-                                  </span>
-                                ))}
+                                {assetDetails?.healthHistory
+                                  .slice(0, 6)
+                                  .map((h) => (
+                                    <span
+                                      key={h.id}
+                                      className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 font-mono text-[10px] font-bold ${
+                                        getGradeTheme(h.healthGrade).badge
+                                      }`}
+                                    >
+                                      {h.healthScore} ({h.healthGrade}) ·{" "}
+                                      {formatDateShort(h.recordedAt)}
+                                    </span>
+                                  ))}
                               </div>
                             </div>
                           )}
@@ -2120,12 +2352,18 @@ export default function InfrastructureHealth() {
                   Register Infrastructure Asset
                 </h2>
                 <p className="text-xs text-ink-soft">
-                  New assets are automatically matched with nearby complaints and scored immediately.
+                  New assets are automatically matched with nearby complaints
+                  and scored immediately.
                 </p>
               </div>
               <button
                 type="button"
-                onClick={() => setShowCreateModal(false)}
+                onClick={() => {
+                  setShowCreateModal(false);
+                  setPickedLocation(null);
+                  setResolvedGeo(null);
+                  setGeoResolveError(null);
+                }}
                 aria-label="Close modal"
                 className="rounded-lg p-1.5 text-ink-soft hover:bg-slate-100 cursor-pointer"
               >
@@ -2135,7 +2373,7 @@ export default function InfrastructureHealth() {
 
             <form
               onSubmit={(e) => void handleCreateAssetSubmit(e)}
-              className="mt-4 space-y-3"
+              className="mt-4 space-y-4"
             >
               {createAssetError && (
                 <div
@@ -2146,6 +2384,7 @@ export default function InfrastructureHealth() {
                 </div>
               )}
 
+              {/* Section A — Asset Identification */}
               <div className="grid gap-3 sm:grid-cols-2">
                 <label className="text-xs font-bold text-ink">
                   Asset Code *
@@ -2154,7 +2393,7 @@ export default function InfrastructureHealth() {
                     required
                     value={newAssetCode}
                     onChange={(e) => setNewAssetCode(e.target.value)}
-                    placeholder="e.g. RD-HYD-2050"
+                    placeholder="e.g. RD-CHN-2050"
                     className="glass-input mt-1 w-full px-3 py-2 text-xs uppercase"
                   />
                 </label>
@@ -2163,14 +2402,18 @@ export default function InfrastructureHealth() {
                   Asset Type *
                   <select
                     value={newAssetType}
-                    onChange={(e) => setNewAssetType(e.target.value as AssetType)}
+                    onChange={(e) =>
+                      setNewAssetType(e.target.value as AssetType)
+                    }
                     className="glass-input mt-1 w-full px-3 py-2 text-xs font-semibold"
                   >
-                    {ASSET_TYPE_OPTIONS.filter((o) => o.value !== "all").map((o) => (
-                      <option key={o.value} value={o.value}>
-                        {o.label}
-                      </option>
-                    ))}
+                    {ASSET_TYPE_OPTIONS.filter((o) => o.value !== "all").map(
+                      (o) => (
+                        <option key={o.value} value={o.value}>
+                          {o.label}
+                        </option>
+                      ),
+                    )}
                   </select>
                 </label>
               </div>
@@ -2182,92 +2425,56 @@ export default function InfrastructureHealth() {
                   required
                   value={newAssetName}
                   onChange={(e) => setNewAssetName(e.target.value)}
-                  placeholder="e.g. Jubilee Hills Checkpost Road Segment"
+                  placeholder="e.g. Anna Nagar West Road Segment"
                   className="glass-input mt-1 w-full px-3 py-2 text-xs"
                 />
               </label>
 
-              {/* City Quick Presets */}
+              {/* Section B — Interactive Map Picker */}
               <div>
-                <span className="block text-[11px] font-bold text-ink-soft mb-1">
-                  Quick City Center Presets
-                </span>
-                <div className="flex flex-wrap gap-1.5">
-                  {Object.keys(CITY_CENTER_PRESETS).map((cityKey) => (
-                    <button
-                      key={cityKey}
-                      type="button"
-                      onClick={() => applyCityPreset(cityKey)}
-                      className="rounded-full border border-indigo-200 bg-indigo-50/75 px-2.5 py-0.5 text-[11px] font-bold text-indigo-800 hover:bg-indigo-100 cursor-pointer"
-                    >
-                      {cityKey}
-                    </button>
-                  ))}
+                <p className="text-xs font-bold text-ink">
+                  Select Location on Map{" "}
+                  <span className="text-rose-600">*</span>
+                </p>
+                <p className="mt-0.5 text-[11px] text-ink-soft">
+                  Click on the map to select the asset location. Drag the marker
+                  to adjust it.
+                </p>
+                <div className="mt-2">
+                  <AssetLocationPicker
+                    pickedLocation={pickedLocation}
+                    defaultCenter={DEFAULT_MAP_CENTER}
+                    onLocationPick={(loc) => void handleLocationPick(loc)}
+                  />
                 </div>
               </div>
 
-              <div className="grid gap-3 sm:grid-cols-3">
-                <label className="text-xs font-bold text-ink">
-                  City
-                  <input
-                    type="text"
-                    value={newAssetCity}
-                    onChange={(e) => setNewAssetCity(e.target.value)}
-                    className="glass-input mt-1 w-full px-3 py-2 text-xs"
-                  />
-                </label>
-                <label className="text-xs font-bold text-ink">
-                  Ward
-                  <input
-                    type="text"
-                    value={newAssetWard}
-                    onChange={(e) => setNewAssetWard(e.target.value)}
-                    className="glass-input mt-1 w-full px-3 py-2 text-xs"
-                  />
-                </label>
-                <label className="text-xs font-bold text-ink">
-                  Zone
-                  <input
-                    type="text"
-                    value={newAssetZone}
-                    onChange={(e) => setNewAssetZone(e.target.value)}
-                    className="glass-input mt-1 w-full px-3 py-2 text-xs"
-                  />
-                </label>
-              </div>
-
-              <label className="block text-xs font-bold text-ink">
-                Address / Stretch Description
-                <input
-                  type="text"
-                  value={newAssetAddress}
-                  onChange={(e) => setNewAssetAddress(e.target.value)}
-                  placeholder="Optional street or junction landmark"
-                  className="glass-input mt-1 w-full px-3 py-2 text-xs"
-                />
-              </label>
-
+              {/* Section C — Coordinates and Maintenance Details */}
               <div className="grid gap-3 sm:grid-cols-4">
                 <label className="text-xs font-bold text-ink">
                   Latitude *
                   <input
-                    type="number"
-                    step="any"
+                    type="text"
+                    readOnly
                     required
-                    value={newAssetLat}
-                    onChange={(e) => setNewAssetLat(e.target.value)}
-                    className="glass-input mt-1 w-full px-2.5 py-2 text-xs"
+                    value={
+                      pickedLocation ? pickedLocation.latitude.toFixed(6) : ""
+                    }
+                    placeholder="Pick on map"
+                    className="glass-input mt-1 w-full cursor-not-allowed bg-slate-50/80 px-2.5 py-2 text-xs font-mono text-ink-soft"
                   />
                 </label>
                 <label className="text-xs font-bold text-ink">
                   Longitude *
                   <input
-                    type="number"
-                    step="any"
+                    type="text"
+                    readOnly
                     required
-                    value={newAssetLng}
-                    onChange={(e) => setNewAssetLng(e.target.value)}
-                    className="glass-input mt-1 w-full px-2.5 py-2 text-xs"
+                    value={
+                      pickedLocation ? pickedLocation.longitude.toFixed(6) : ""
+                    }
+                    placeholder="Pick on map"
+                    className="glass-input mt-1 w-full cursor-not-allowed bg-slate-50/80 px-2.5 py-2 text-xs font-mono text-ink-soft"
                   />
                 </label>
                 <label className="text-xs font-bold text-ink">
@@ -2282,7 +2489,7 @@ export default function InfrastructureHealth() {
                   />
                 </label>
                 <label className="text-xs font-bold text-ink">
-                  Last Maint
+                  Last Maintained
                   <input
                     type="date"
                     value={newAssetLastMaint}
@@ -2292,20 +2499,121 @@ export default function InfrastructureHealth() {
                 </label>
               </div>
 
+              {/* Section D — Administrative Location (auto-resolved) */}
+              <div>
+                {geoResolving && (
+                  <div className="flex items-center gap-2 rounded-xl border border-indigo-100 bg-indigo-50/70 px-3 py-2 text-xs text-indigo-700">
+                    <ArrowsClockwise
+                      size={13}
+                      className="animate-spin shrink-0"
+                    />
+                    Resolving administrative geography…
+                  </div>
+                )}
+
+                {!geoResolving && geoResolveError && (
+                  <div className="rounded-xl border border-amber-200 bg-amber-50/70 px-3 py-2 text-[11px] font-semibold text-amber-800">
+                    Location outside supported administrative coverage. City,
+                    ward and zone will not be assigned automatically.
+                  </div>
+                )}
+
+                {!geoResolving &&
+                  resolvedGeo &&
+                  !resolvedGeo.resolved &&
+                  !geoResolveError && (
+                    <div className="rounded-xl border border-amber-200 bg-amber-50/70 px-3 py-2 text-[11px] font-semibold text-amber-800">
+                      Location outside supported administrative coverage. City,
+                      ward and zone will not be assigned automatically.
+                    </div>
+                  )}
+
+                <div className="mt-2 grid gap-3 sm:grid-cols-3">
+                  <label className="text-xs font-bold text-ink">
+                    City
+                    <input
+                      type="text"
+                      readOnly
+                      value={resolvedGeo?.city ?? ""}
+                      placeholder={
+                        geoResolving
+                          ? "Resolving…"
+                          : pickedLocation
+                            ? "Not covered"
+                            : "Select map location"
+                      }
+                      className="glass-input mt-1 w-full cursor-not-allowed bg-slate-50/80 px-3 py-2 text-xs text-ink-soft"
+                    />
+                  </label>
+                  <label className="text-xs font-bold text-ink">
+                    Zone
+                    <input
+                      type="text"
+                      readOnly
+                      value={resolvedGeo?.zone ?? ""}
+                      placeholder={
+                        geoResolving
+                          ? "Resolving…"
+                          : pickedLocation
+                            ? "Not covered"
+                            : "Select map location"
+                      }
+                      className="glass-input mt-1 w-full cursor-not-allowed bg-slate-50/80 px-3 py-2 text-xs text-ink-soft"
+                    />
+                  </label>
+                  <label className="text-xs font-bold text-ink">
+                    Ward
+                    <input
+                      type="text"
+                      readOnly
+                      value={resolvedGeo?.ward ?? ""}
+                      placeholder={
+                        geoResolving
+                          ? "Resolving…"
+                          : pickedLocation
+                            ? "Not covered"
+                            : "Select map location"
+                      }
+                      className="glass-input mt-1 w-full cursor-not-allowed bg-slate-50/80 px-3 py-2 text-xs text-ink-soft"
+                    />
+                  </label>
+                </div>
+              </div>
+
+              {/* Section E — Address / Stretch Description */}
+              <label className="block text-xs font-bold text-ink">
+                Address / Stretch Description
+                <input
+                  type="text"
+                  value={newAssetAddress}
+                  onChange={(e) => setNewAssetAddress(e.target.value)}
+                  placeholder="Optional street or junction landmark"
+                  className="glass-input mt-1 w-full px-3 py-2 text-xs"
+                />
+              </label>
+
+              {/* Section F — Actions */}
               <div className="flex justify-end gap-2 border-t border-slate-200/70 pt-3">
                 <button
                   type="button"
-                  onClick={() => setShowCreateModal(false)}
+                  onClick={() => {
+                    setShowCreateModal(false);
+                    setPickedLocation(null);
+                    setResolvedGeo(null);
+                    setGeoResolveError(null);
+                  }}
                   className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-xs font-bold text-ink-soft hover:bg-slate-50 cursor-pointer"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  disabled={creatingAsset}
+                  disabled={creatingAsset || !pickedLocation}
                   className="ios-btn-primary px-4 py-2 text-xs font-bold text-white disabled:opacity-60 cursor-pointer"
                 >
-                  {creatingAsset ? "Registering & Scoring…" : "Register & Score Asset"}
+                  {creatingAsset
+                    ? "Registering & Scoring…"
+                    : "Register & Score Asset"}
                 </button>
               </div>
             </form>

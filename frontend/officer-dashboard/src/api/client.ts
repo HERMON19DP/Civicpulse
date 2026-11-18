@@ -883,4 +883,42 @@ export const api = {
     );
     return response.data;
   },
+
+  /**
+   * Resolve administrative geography (city, ward, zone) for a coordinate pair.
+   *
+   * Uses PostGIS point-in-polygon (GCC Chennai boundary import) first,
+   * then falls back to centroid-proximity for other known cities.
+   * Returns resolved=false when the coordinate is outside supported coverage.
+   */
+  resolveAdminGeography: async (
+    latitude: number,
+    longitude: number,
+  ): Promise<{
+    resolved: boolean;
+    method: string;
+    city: string | null;
+    ward: string | null;
+    zone: string | null;
+    wardId: string | null;
+    zoneId: string | null;
+    municipalityId: string | null;
+    boundaryVersionId: string | null;
+  }> => {
+    const response = await request<{
+      success: boolean;
+      data: {
+        resolved: boolean;
+        method: string;
+        city: string | null;
+        ward: string | null;
+        zone: string | null;
+        wardId: string | null;
+        zoneId: string | null;
+        municipalityId: string | null;
+        boundaryVersionId: string | null;
+      };
+    }>(`/spatial/resolve?lat=${encodeURIComponent(latitude)}&lng=${encodeURIComponent(longitude)}`);
+    return response.data;
+  },
 };

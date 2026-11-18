@@ -11,6 +11,7 @@ const {
   getWardAnalytics,
   getActiveCities,
   geocodePlace,
+  resolveAdministrativeGeography,
 } = require("./spatial.controller");
 const { analyzeClusters } = require("./clustering.controller");
 
@@ -19,6 +20,8 @@ const router = express.Router();
 router.get("/cities", authenticate, getActiveCities);
 
 router.get("/geocode", authenticate, geocodePlace);
+
+router.get("/resolve", authenticate, resolveAdministrativeGeography);
 
 router.post(
   "/analyze",
