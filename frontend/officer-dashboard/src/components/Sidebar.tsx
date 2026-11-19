@@ -13,21 +13,9 @@ import {
 const NAV_ITEMS = [
   { to: "/officer", label: "Dashboard", icon: SquaresFour, end: true },
   {
-    to: "/officer/copilot",
-    label: "Officer Copilot",
-    icon: Robot,
-    end: false,
-  },
-  {
     to: "/officer/complaints",
     label: "Complaint Queue",
     icon: ClipboardText,
-    end: false,
-  },
-  {
-    to: "/officer/profile",
-    label: "Officer Profile",
-    icon: UserCircle,
     end: false,
   },
   {
@@ -46,6 +34,18 @@ const NAV_ITEMS = [
     to: "/officer/knowledge-graph",
     label: "Knowledge Graph",
     icon: ShareNetwork,
+    end: false,
+  },
+  {
+    to: "/officer/copilot",
+    label: "Officer Copilot",
+    icon: Robot,
+    end: false,
+  },
+  {
+    to: "/officer/profile",
+    label: "Officer Profile",
+    icon: UserCircle,
     end: false,
   },
 ];
