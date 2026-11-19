@@ -14,12 +14,10 @@ import {
   GlobeHemisphereEast,
   Graph,
   Heartbeat,
-  Info,
   Lightbulb,
   LinkSimple,
   MagnifyingGlass,
   MapPin,
-  Path,
   RoadHorizon,
   Robot,
   ShareNetwork,
@@ -33,7 +31,10 @@ import {
   Wrench,
   X,
 } from "@phosphor-icons/react";
-import { ExpandableFilterBar, type ActiveFilterChip } from "../components/ExpandableFilterBar";
+import {
+  ExpandableFilterBar,
+  type ActiveFilterChip,
+} from "../components/ExpandableFilterBar";
 import { api } from "../api/client";
 import type { ActiveCitiesResponse } from "../types/spatial";
 import type {
@@ -48,7 +49,6 @@ import type {
   GraphOverviewResponse,
   NodeNeighborhoodResponse,
   PotentialContributingAsset,
-  ShortestPathResponse,
 } from "../types/graph";
 
 type InvestigationMode = "asset" | "complaint" | "node";
@@ -129,7 +129,10 @@ const ENTITY_THEME: Record<GraphEntityType, EntityVisualTheme> = {
   },
 };
 
-const ENTITY_FILTER_OPTIONS: Array<{ value: "all" | GraphEntityType; label: string }> = [
+const ENTITY_FILTER_OPTIONS: Array<{
+  value: "all" | GraphEntityType;
+  label: string;
+}> = [
   { value: "all", label: "All Entities" },
   { value: "INFRASTRUCTURE_ASSET", label: "Assets" },
   { value: "COMPLAINT", label: "Complaints" },
@@ -198,7 +201,9 @@ function getShortNodeLabel(node: GraphNode): string {
   }
   if (node.entityType === "COMPLAINT" && props.referenceId) {
     const ref = String(props.referenceId);
-    const title = props.title ? ` · ${truncateText(String(props.title), 14)}` : "";
+    const title = props.title
+      ? ` · ${truncateText(String(props.title), 14)}`
+      : "";
     return `${ref}${title}`;
   }
   if (node.entityType === "MAINTENANCE_EVENT") {
@@ -248,7 +253,6 @@ function computeRadialLayout(
   centerNode: GraphNode | null,
   nodes: GraphNode[],
   edges: GraphEdge[],
-  highlightedNodeIds: Set<string>,
 ): {
   positioned: PositionedNode[];
   visibleIds: Set<string>;
@@ -258,7 +262,6 @@ function computeRadialLayout(
     return { positioned: [], visibleIds: new Set(), hiddenCount: 0 };
   }
 
-  const nodeMap = new Map(nodes.map((n) => [n.id, n]));
   const adj = new Map<string, string[]>();
   const inferredAdj = new Set<string>();
 
@@ -288,9 +291,6 @@ function computeRadialLayout(
   }
 
   const sortPriority = (a: GraphNode, b: GraphNode) => {
-    const aPath = highlightedNodeIds.has(a.id) ? 0 : 1;
-    const bPath = highlightedNodeIds.has(b.id) ? 0 : 1;
-    if (aPath !== bPath) return aPath - bPath;
     const aInf = inferredAdj.has(a.id) ? 0 : 1;
     const bInf = inferredAdj.has(b.id) ? 0 : 1;
     if (aInf !== bInf) return aInf - bInf;
@@ -311,22 +311,6 @@ function computeRadialLayout(
   const MAX_RING2 = 10;
   const ring1 = ring1Raw.slice(0, MAX_RING1);
   const ring2 = ring2Raw.slice(0, MAX_RING2);
-
-  // Ensure any path node is always included
-  for (const pid of highlightedNodeIds) {
-    if (pid === centerNode.id) continue;
-    const pn = nodeMap.get(pid);
-    if (!pn) continue;
-    if (!ring1.some((x) => x.id === pid) && !ring2.some((x) => x.id === pid)) {
-      if (hopMap.get(pid) === 1) {
-        if (ring1.length >= MAX_RING1) ring1.pop();
-        ring1.push(pn);
-      } else {
-        if (ring2.length >= MAX_RING2) ring2.pop();
-        ring2.push(pn);
-      }
-    }
-  }
 
   const positioned: PositionedNode[] = [
     { node: centerNode, x: CENTER_X, y: CENTER_Y, ring: 0, radius: 28 },
@@ -369,7 +353,9 @@ export default function KnowledgeGraph() {
   const [searchParams, setSearchParams] = useSearchParams();
 
   const [selectedCity, setSelectedCity] = useState<string>("all");
-  const [entityTypeFilter, setEntityTypeFilter] = useState<"all" | GraphEntityType>("all");
+  const [entityTypeFilter, setEntityTypeFilter] = useState<
+    "all" | GraphEntityType
+  >("all");
   const [relationFilter, setRelationFilter] = useState<string>("all");
   const [traversalDepth, setTraversalDepth] = useState<number>(2);
   const [searchTerm, setSearchTerm] = useState<string>("");
@@ -377,7 +363,9 @@ export default function KnowledgeGraph() {
   const [filtersOpen, setFiltersOpen] = useState<boolean>(false);
   const [metricsOpen, setMetricsOpen] = useState<boolean>(false);
 
-  const [citiesData, setCitiesData] = useState<ActiveCitiesResponse | null>(null);
+  const [citiesData, setCitiesData] = useState<ActiveCitiesResponse | null>(
+    null,
+  );
   const [overview, setOverview] = useState<GraphOverviewResponse | null>(null);
   const [metrics, setMetrics] = useState<GraphMetricsResponse | null>(null);
 
@@ -390,20 +378,21 @@ export default function KnowledgeGraph() {
   const [investigationSummary, setInvestigationSummary] = useState<string>("");
   const [guardrailNotice, setGuardrailNotice] = useState<string>("");
   const [evidenceChains, setEvidenceChains] = useState<EvidenceChain[]>([]);
-  const [potentialAssets, setPotentialAssets] = useState<PotentialContributingAsset[]>([]);
-  const [expandedChains, setExpandedChains] = useState<Record<string, boolean>>({});
+  const [potentialAssets, setPotentialAssets] = useState<
+    PotentialContributingAsset[]
+  >([]);
+  const [expandedChains, setExpandedChains] = useState<Record<string, boolean>>(
+    {},
+  );
 
-  const [selectedInspectorNode, setSelectedInspectorNode] = useState<GraphNode | null>(null);
+  const [selectedInspectorNode, setSelectedInspectorNode] =
+    useState<GraphNode | null>(null);
   const [selectedEdge, setSelectedEdge] = useState<GraphEdge | null>(null);
   const [hoveredEdgeId, setHoveredEdgeId] = useState<string | null>(null);
 
-  const [history, setHistory] = useState<Array<{ mode: InvestigationMode; key: string; label: string }>>([]);
-
-  // Shortest Path Tracer state
-  const [pathFrom, setPathFrom] = useState<string>("");
-  const [pathTo, setPathTo] = useState<string>("");
-  const [pathResult, setPathResult] = useState<ShortestPathResponse | null>(null);
-  const [tracingPath, setTracingPath] = useState<boolean>(false);
+  const [history, setHistory] = useState<
+    Array<{ mode: InvestigationMode; key: string; label: string }>
+  >([]);
 
   const [loadingOverview, setLoadingOverview] = useState<boolean>(true);
   const [loadingGraph, setLoadingGraph] = useState<boolean>(false);
@@ -417,7 +406,10 @@ export default function KnowledgeGraph() {
     (
       nextMode: InvestigationMode,
       nextKey: string,
-      payload: AssetInvestigationResponse | ComplaintInvestigationResponse | NodeNeighborhoodResponse,
+      payload:
+        | AssetInvestigationResponse
+        | ComplaintInvestigationResponse
+        | NodeNeighborhoodResponse,
       recordHistory = false,
     ) => {
       if (recordHistory && centerNode && targetKey && targetKey !== nextKey) {
@@ -449,7 +441,10 @@ export default function KnowledgeGraph() {
         setExpandedChains(initExpanded);
       } else {
         const counts = Object.entries(payload.neighborCountsByType || {})
-          .map(([k, v]) => `${v} ${ENTITY_THEME[k as GraphEntityType]?.shortLabel || k}`)
+          .map(
+            ([k, v]) =>
+              `${v} ${ENTITY_THEME[k as GraphEntityType]?.shortLabel || k}`,
+          )
           .join(" · ");
         setInvestigationSummary(
           counts
@@ -482,7 +477,12 @@ export default function KnowledgeGraph() {
           const res = await api.investigateGraphAsset(codeOrId, {
             includeInferred: useInferred,
           });
-          applyInvestigationPayload("asset", res.centerNode.nodeKey, res, opts?.recordHistory);
+          applyInvestigationPayload(
+            "asset",
+            res.centerNode.nodeKey,
+            res,
+            opts?.recordHistory,
+          );
           if (opts?.syncUrl !== false) {
             const ac = String(res.centerNode.properties?.assetCode || codeOrId);
             setSearchParams({ assetCode: ac }, { replace: true });
@@ -492,7 +492,12 @@ export default function KnowledgeGraph() {
           const res = await api.investigateGraphComplaint(cid, {
             includeInferred: useInferred,
           });
-          applyInvestigationPayload("complaint", res.centerNode.nodeKey, res, opts?.recordHistory);
+          applyInvestigationPayload(
+            "complaint",
+            res.centerNode.nodeKey,
+            res,
+            opts?.recordHistory,
+          );
           if (opts?.syncUrl !== false) {
             setSearchParams({ complaintId: cid }, { replace: true });
           }
@@ -502,28 +507,50 @@ export default function KnowledgeGraph() {
             maxNodes: 75,
             includeInferred: useInferred,
           });
-          applyInvestigationPayload("node", res.centerNode.nodeKey, res, opts?.recordHistory);
+          applyInvestigationPayload(
+            "node",
+            res.centerNode.nodeKey,
+            res,
+            opts?.recordHistory,
+          );
           if (opts?.syncUrl !== false) {
-            setSearchParams({ nodeKey: res.centerNode.nodeKey }, { replace: true });
+            setSearchParams(
+              { nodeKey: res.centerNode.nodeKey },
+              { replace: true },
+            );
           }
         }
       } catch (err) {
-        setError(err instanceof Error ? err.message : "Failed to load Knowledge Graph entity");
+        setError(
+          err instanceof Error
+            ? err.message
+            : "Failed to load Knowledge Graph entity",
+        );
       } finally {
         setLoadingGraph(false);
       }
     },
-    [applyInvestigationPayload, includeInferred, setSearchParams, traversalDepth],
+    [
+      applyInvestigationPayload,
+      includeInferred,
+      setSearchParams,
+      traversalDepth,
+    ],
   );
 
   const refreshOverviewAndMetrics = useCallback(
-    async (cityParam: string, entityFilterParam: "all" | GraphEntityType, qParam: string) => {
+    async (
+      cityParam: string,
+      entityFilterParam: "all" | GraphEntityType,
+      qParam: string,
+    ) => {
       setLoadingOverview(true);
       try {
         const [ov, gm] = await Promise.all([
           api.getGraphOverview({
             city: cityParam !== "all" ? cityParam : undefined,
-            entityType: entityFilterParam !== "all" ? entityFilterParam : undefined,
+            entityType:
+              entityFilterParam !== "all" ? entityFilterParam : undefined,
             q: qParam.trim() || undefined,
             limit: 160,
           }),
@@ -536,7 +563,11 @@ export default function KnowledgeGraph() {
         }
         return ov;
       } catch (err) {
-        setError(err instanceof Error ? err.message : "Failed to load Knowledge Graph overview");
+        setError(
+          err instanceof Error
+            ? err.message
+            : "Failed to load Knowledge Graph overview",
+        );
         return null;
       } finally {
         setLoadingOverview(false);
@@ -559,7 +590,8 @@ export default function KnowledgeGraph() {
       const ov = await refreshOverviewAndMetrics("all", "all", "");
       if (!active) return;
 
-      const paramAssetCode = searchParams.get("assetCode") || searchParams.get("assetId");
+      const paramAssetCode =
+        searchParams.get("assetCode") || searchParams.get("assetId");
       const paramComplaintId = searchParams.get("complaintId");
       const paramNodeKey = searchParams.get("nodeKey");
       didHandleInitialParams.current = true;
@@ -575,7 +607,9 @@ export default function KnowledgeGraph() {
         if (flagship) {
           await loadTarget("asset", flagship.assetCode, { syncUrl: false });
         } else {
-          const firstAsset = ov.nodes.find((n) => n.entityType === "INFRASTRUCTURE_ASSET");
+          const firstAsset = ov.nodes.find(
+            (n) => n.entityType === "INFRASTRUCTURE_ASSET",
+          );
           const firstAny = firstAsset || ov.nodes[0];
           if (firstAny) {
             await loadTarget(
@@ -602,52 +636,22 @@ export default function KnowledgeGraph() {
   useEffect(() => {
     if (!didHandleInitialParams.current) return;
     const handle = window.setTimeout(() => {
-      void refreshOverviewAndMetrics(selectedCity, entityTypeFilter, searchTerm);
+      void refreshOverviewAndMetrics(
+        selectedCity,
+        entityTypeFilter,
+        searchTerm,
+      );
     }, 180);
     return () => window.clearTimeout(handle);
   }, [selectedCity, entityTypeFilter, searchTerm, refreshOverviewAndMetrics]);
 
-  // Select good default Shortest Path endpoints when center or overview changes
-  const selectablePathNodes = useMemo(() => {
-    const merged = new Map<string, GraphNode>();
-    for (const n of graphNodes) merged.set(n.nodeKey, n);
-    for (const n of overview?.nodes || []) {
-      if (!merged.has(n.nodeKey)) merged.set(n.nodeKey, n);
-    }
-    return Array.from(merged.values()).sort((a, b) => {
-      const pa = ENTITY_RING_PRIORITY[a.entityType] ?? 9;
-      const pb = ENTITY_RING_PRIORITY[b.entityType] ?? 9;
-      if (pa !== pb) return pa - pb;
-      return a.label.localeCompare(b.label);
-    });
-  }, [graphNodes, overview?.nodes]);
-
-  useEffect(() => {
-    if (!centerNode || selectablePathNodes.length < 2) return;
-    setPathTo(centerNode.nodeKey);
-
-    if (potentialAssets[0]?.upstreamComplaints?.[0]?.nodeKey) {
-      setPathFrom(potentialAssets[0].upstreamComplaints[0].nodeKey);
-      return;
-    }
-    if (potentialAssets[0]?.nodeKey) {
-      setPathFrom(potentialAssets[0].nodeKey);
-      return;
-    }
-    const candidate = selectablePathNodes.find(
-      (n) =>
-        n.nodeKey !== centerNode.nodeKey &&
-        (n.entityType === "COMPLAINT" || n.entityType === "INFRASTRUCTURE_ASSET"),
-    );
-    if (candidate) {
-      setPathFrom(candidate.nodeKey);
-    }
-  }, [centerNode, potentialAssets, selectablePathNodes]);
-
   async function handleSelectCity(city: string) {
     setSelectedCity(city);
-    setPathResult(null);
-    const ov = await refreshOverviewAndMetrics(city, entityTypeFilter, searchTerm);
+    const ov = await refreshOverviewAndMetrics(
+      city,
+      entityTypeFilter,
+      searchTerm,
+    );
     if (!ov) return;
     const flagship = ov.flagshipTargets?.[0];
     if (flagship) {
@@ -670,23 +674,10 @@ export default function KnowledgeGraph() {
     const next = !includeInferred;
     setIncludeInferred(next);
     if (targetKey) {
-      await loadTarget(mode, targetKey, { inferred: next, recordHistory: false });
-    }
-    if (pathFrom && pathTo && pathResult) {
-      setTracingPath(true);
-      try {
-        const res = await api.findGraphShortestPath({
-          from: pathFrom,
-          to: pathTo,
-          maxDepth: 5,
-          includeInferred: next,
-        });
-        setPathResult(res);
-      } catch {
-        setPathResult(null);
-      } finally {
-        setTracingPath(false);
-      }
+      await loadTarget(mode, targetKey, {
+        inferred: next,
+        recordHistory: false,
+      });
     }
   }
 
@@ -701,33 +692,22 @@ export default function KnowledgeGraph() {
       setNotice(
         `Knowledge Graph rebuilt (${res.nodesSynced} nodes · ${res.edgesSynced} edges · ${res.inferredEdgesCount} inferred links in ${res.durationMs}ms).`,
       );
-      await refreshOverviewAndMetrics(selectedCity, entityTypeFilter, searchTerm);
+      await refreshOverviewAndMetrics(
+        selectedCity,
+        entityTypeFilter,
+        searchTerm,
+      );
       if (targetKey) {
         await loadTarget(mode, targetKey, { syncUrl: false });
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to rebuild Knowledge Graph");
+      setError(
+        err instanceof Error
+          ? err.message
+          : "Failed to rebuild Knowledge Graph",
+      );
     } finally {
       setRebuilding(false);
-    }
-  }
-
-  async function handleTracePath() {
-    if (!pathFrom || !pathTo) return;
-    setTracingPath(true);
-    setError(null);
-    try {
-      const res = await api.findGraphShortestPath({
-        from: pathFrom,
-        to: pathTo,
-        maxDepth: 5,
-        includeInferred,
-      });
-      setPathResult(res);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Shortest path lookup failed");
-    } finally {
-      setTracingPath(false);
     }
   }
 
@@ -740,7 +720,9 @@ export default function KnowledgeGraph() {
       const code = String(node.properties?.assetCode || node.nodeKey);
       void loadTarget("asset", code, { recordHistory: true });
     } else if (node.entityType === "COMPLAINT") {
-      void loadTarget("complaint", node.externalId || node.nodeKey, { recordHistory: true });
+      void loadTarget("complaint", node.externalId || node.nodeKey, {
+        recordHistory: true,
+      });
     } else {
       void loadTarget("node", node.nodeKey, { recordHistory: true });
     }
@@ -767,37 +749,9 @@ export default function KnowledgeGraph() {
     return Array.from(set).sort((a, b) => a.localeCompare(b));
   }, [citiesData, overview]);
 
-  const highlightedNodeIds = useMemo(
-    () => new Set((pathResult?.found ? pathResult.pathNodes : []).map((n) => n.id)),
-    [pathResult],
-  );
-  const highlightedEdgeIds = useMemo(
-    () => new Set((pathResult?.found ? pathResult.pathEdges : []).map((e) => e.id)),
-    [pathResult],
-  );
-
-  // Merge active neighborhood + shortest path nodes/edges so traced paths render completely on canvas
-  const canvasNodes = useMemo(() => {
-    const byId = new Map<string, GraphNode>();
-    for (const n of graphNodes) byId.set(n.id, n);
-    if (pathResult?.found) {
-      for (const n of pathResult.pathNodes) byId.set(n.id, n);
-    }
-    return Array.from(byId.values());
-  }, [graphNodes, pathResult]);
-
-  const canvasEdges = useMemo(() => {
-    const byId = new Map<string, GraphEdge>();
-    for (const e of graphEdges) byId.set(e.id, e);
-    if (pathResult?.found) {
-      for (const e of pathResult.pathEdges) byId.set(e.id, e);
-    }
-    return Array.from(byId.values());
-  }, [graphEdges, pathResult]);
-
   const radial = useMemo(
-    () => computeRadialLayout(centerNode, canvasNodes, canvasEdges, highlightedNodeIds),
-    [centerNode, canvasNodes, canvasEdges, highlightedNodeIds],
+    () => computeRadialLayout(centerNode, graphNodes, graphEdges),
+    [centerNode, graphNodes, graphEdges],
   );
 
   const posMap = useMemo(
@@ -807,7 +761,7 @@ export default function KnowledgeGraph() {
 
   const renderedEdges = useMemo(
     () =>
-      canvasEdges.filter(
+      graphEdges.filter(
         (e) =>
           radial.visibleIds.has(e.sourceNodeId) &&
           radial.visibleIds.has(e.targetNodeId) &&
@@ -815,16 +769,16 @@ export default function KnowledgeGraph() {
           (relationFilter === "all" ||
             e.relationType.toUpperCase() === relationFilter.toUpperCase()),
       ),
-    [canvasEdges, includeInferred, radial.visibleIds, relationFilter],
+    [graphEdges, includeInferred, radial.visibleIds, relationFilter],
   );
 
   const availableRelations = useMemo(() => {
     const set = new Set<string>();
-    for (const e of canvasEdges) {
+    for (const e of graphEdges) {
       if (e.relationType) set.add(e.relationType.toUpperCase());
     }
     return Array.from(set).sort((a, b) => a.localeCompare(b));
-  }, [canvasEdges]);
+  }, [graphEdges]);
 
   const activeFilterChips = useMemo<ActiveFilterChip[]>(() => {
     const chips: ActiveFilterChip[] = [];
@@ -837,8 +791,8 @@ export default function KnowledgeGraph() {
     }
     if (entityTypeFilter !== "all") {
       const lbl =
-        ENTITY_FILTER_OPTIONS.find((o) => o.value === entityTypeFilter)?.label ||
-        entityTypeFilter;
+        ENTITY_FILTER_OPTIONS.find((o) => o.value === entityTypeFilter)
+          ?.label || entityTypeFilter;
       chips.push({
         key: "entityType",
         label: `Entity: ${lbl}`,
@@ -868,7 +822,13 @@ export default function KnowledgeGraph() {
     }
     return chips;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedCity, entityTypeFilter, includeInferred, relationFilter, traversalDepth]);
+  }, [
+    selectedCity,
+    entityTypeFilter,
+    includeInferred,
+    relationFilter,
+    traversalDepth,
+  ]);
 
   function handleResetGraphFilters() {
     setEntityTypeFilter("all");
@@ -886,15 +846,22 @@ export default function KnowledgeGraph() {
   const navigatorNodes = useMemo(() => {
     const byKey = new Map<string, GraphNode>();
     for (const n of overview?.nodes || []) byKey.set(n.nodeKey, n);
-    for (const n of graphNodes) if (!byKey.has(n.nodeKey)) byKey.set(n.nodeKey, n);
+    for (const n of graphNodes)
+      if (!byKey.has(n.nodeKey)) byKey.set(n.nodeKey, n);
 
     const q = searchTerm.trim().toLowerCase();
     return Array.from(byKey.values())
       .filter((n) => {
-        if (entityTypeFilter !== "all" && n.entityType !== entityTypeFilter) return false;
+        if (entityTypeFilter !== "all" && n.entityType !== entityTypeFilter)
+          return false;
         if (selectedCity !== "all") {
-          const isGlobal = ["DEPARTMENT", "CATEGORY", "OFFICER"].includes(n.entityType);
-          if (!isGlobal && (n.city || "").toLowerCase() !== selectedCity.toLowerCase()) {
+          const isGlobal = ["DEPARTMENT", "CATEGORY", "OFFICER"].includes(
+            n.entityType,
+          );
+          if (
+            !isGlobal &&
+            (n.city || "").toLowerCase() !== selectedCity.toLowerCase()
+          ) {
             return false;
           }
         }
@@ -902,33 +869,18 @@ export default function KnowledgeGraph() {
           return (
             n.label.toLowerCase().includes(q) ||
             n.nodeKey.toLowerCase().includes(q) ||
-            String(n.ward || "").toLowerCase().includes(q) ||
-            String(n.city || "").toLowerCase().includes(q)
+            String(n.ward || "")
+              .toLowerCase()
+              .includes(q) ||
+            String(n.city || "")
+              .toLowerCase()
+              .includes(q)
           );
         }
         return true;
       })
       .slice(0, 24);
   }, [overview?.nodes, graphNodes, entityTypeFilter, selectedCity, searchTerm]);
-
-  const activeProvenance = selectedEdge
-    ? {
-        title: `${formatRelationLabel(selectedEdge.relationType)} Edge`,
-        isInferred: selectedEdge.isInferred,
-        confidence: selectedEdge.confidence,
-        evidence: selectedEdge.evidence || selectedEdge.provenance?.evidenceSummary,
-        provenance: selectedEdge.provenance,
-      }
-    : selectedInspectorNode
-      ? {
-          title: `${ENTITY_THEME[selectedInspectorNode.entityType]?.label || selectedInspectorNode.entityType}: ${getShortNodeLabel(selectedInspectorNode)}`,
-          isInferred: Boolean(selectedInspectorNode.provenance?.isInferred),
-          confidence: selectedInspectorNode.provenance?.confidence ?? 1.0,
-          evidence:
-            selectedInspectorNode.provenance?.evidenceSummary || selectedInspectorNode.label,
-          provenance: selectedInspectorNode.provenance,
-        }
-      : null;
 
   return (
     <div className="flex flex-col gap-5">
@@ -943,7 +895,9 @@ export default function KnowledgeGraph() {
             Civic Knowledge Graph
           </h1>
           <p className="text-sm font-medium text-ink-soft">
-            Explore multi-hop relationships connecting complaints, physical infrastructure assets, spatial hotspots, maintenance events, wards, and departments.
+            Explore multi-hop relationships connecting complaints, physical
+            infrastructure assets, spatial hotspots, maintenance events, wards,
+            and departments.
           </p>
         </div>
 
@@ -969,7 +923,10 @@ export default function KnowledgeGraph() {
             disabled={rebuilding}
             className="ios-btn-primary inline-flex items-center gap-1.5 px-4 py-2 text-xs font-bold text-white disabled:opacity-60 cursor-pointer"
           >
-            <ArrowsClockwise size={14} className={rebuilding ? "animate-spin" : ""} />
+            <ArrowsClockwise
+              size={14}
+              className={rebuilding ? "animate-spin" : ""}
+            />
             {rebuilding
               ? "Syncing Graph…"
               : selectedCity !== "all"
@@ -992,10 +949,16 @@ export default function KnowledgeGraph() {
             <div className="glass-panel border border-indigo-200/75 bg-gradient-to-r from-indigo-50/80 via-white/80 to-sky-50/75 p-4 text-xs">
               <div className="flex flex-wrap items-center justify-between gap-2 border-b border-indigo-100 pb-2.5">
                 <div className="flex items-center gap-2">
-                  <Sparkle size={15} weight="duotone" className="text-indigo-700" />
+                  <Sparkle
+                    size={15}
+                    weight="duotone"
+                    className="text-indigo-700"
+                  />
                   <span className="font-extrabold text-ink">
                     Knowledge Graph Coverage, Provenance &amp; Connectivity
-                    {metrics.city ? ` (${metrics.city})` : " (All Jurisdictions)"}
+                    {metrics.city
+                      ? ` (${metrics.city})`
+                      : " (All Jurisdictions)"}
                   </span>
                 </div>
                 <span className="text-[11px] text-ink-soft">
@@ -1011,7 +974,9 @@ export default function KnowledgeGraph() {
                   <span className="mt-0.5 block font-mono text-base font-extrabold text-ink">
                     {metrics.totalNodes} nodes · {metrics.totalEdges} edges
                   </span>
-                  <span className="text-[10px] text-ink-soft">PostgreSQL graph store</span>
+                  <span className="text-[10px] text-ink-soft">
+                    PostgreSQL graph store
+                  </span>
                 </div>
 
                 <div className="rounded-xl border border-white/85 bg-white/75 px-3 py-2.5">
@@ -1048,7 +1013,8 @@ export default function KnowledgeGraph() {
                   </span>
                   <span className="text-[10px] text-ink-soft">
                     {metrics.relationshipCoverage.connectedComplaints}/
-                    {metrics.relationshipCoverage.complaintCount} complaints connected
+                    {metrics.relationshipCoverage.complaintCount} complaints
+                    connected
                   </span>
                 </div>
 
@@ -1057,28 +1023,33 @@ export default function KnowledgeGraph() {
                     Verified vs Inferred
                   </span>
                   <span className="mt-0.5 block font-mono text-base font-extrabold text-amber-800">
-                    {metrics.factualEdgesCount} factual · {metrics.inferredEdgesCount} inferred
+                    {metrics.factualEdgesCount} factual ·{" "}
+                    {metrics.inferredEdgesCount} inferred
                   </span>
                   <span className="text-[10px] text-ink-soft">
-                    {metrics.crossInfrastructurePotentialLinks} cross-infra potential link(s)
+                    {metrics.crossInfrastructurePotentialLinks} cross-infra
+                    potential link(s)
                   </span>
                 </div>
               </div>
 
               <div className="mt-2.5 flex flex-wrap gap-1.5">
-                {Object.entries(metrics.nodesByType || {}).map(([type, count]) => {
-                  const theme = ENTITY_THEME[type as GraphEntityType];
-                  return (
-                    <span
-                      key={type}
-                      className={`rounded-full border px-2 py-0.5 text-[10px] font-bold ${
-                        theme?.pillCls || "border-slate-200 bg-white/80 text-slate-700"
-                      }`}
-                    >
-                      {theme?.shortLabel || type}: {count}
-                    </span>
-                  );
-                })}
+                {Object.entries(metrics.nodesByType || {}).map(
+                  ([type, count]) => {
+                    const theme = ENTITY_THEME[type as GraphEntityType];
+                    return (
+                      <span
+                        key={type}
+                        className={`rounded-full border px-2 py-0.5 text-[10px] font-bold ${
+                          theme?.pillCls ||
+                          "border-slate-200 bg-white/80 text-slate-700"
+                        }`}
+                      >
+                        {theme?.shortLabel || type}: {count}
+                      </span>
+                    );
+                  },
+                )}
               </div>
             </div>
           </motion.div>
@@ -1087,9 +1058,15 @@ export default function KnowledgeGraph() {
 
       {/* Guardrail Banner */}
       <div className="flex items-start gap-2.5 rounded-2xl border border-amber-300/65 bg-amber-50/75 px-4 py-2.5 text-xs text-amber-950 backdrop-blur-md">
-        <ShieldWarning size={17} weight="fill" className="mt-0.5 shrink-0 text-amber-700" />
+        <ShieldWarning
+          size={17}
+          weight="fill"
+          className="mt-0.5 shrink-0 text-amber-700"
+        />
         <p className="leading-relaxed">
-          <strong className="font-bold">Non-Causal Inference Guardrail: </strong>
+          <strong className="font-bold">
+            Non-Causal Inference Guardrail:{" "}
+          </strong>
           {guardrailNotice ||
             "Confirmed records appear as solid lines; spatial or semantic inferences appear as dashed amber links marked 'Potential Relationship (Non-Causal)' and require field verification."}
         </p>
@@ -1099,7 +1076,11 @@ export default function KnowledgeGraph() {
       {notice && (
         <div className="flex items-center justify-between gap-2 rounded-xl border border-emerald-300/70 bg-emerald-500/15 px-4 py-2.5 text-xs font-semibold text-emerald-900">
           <div className="flex items-center gap-2">
-            <CheckCircle size={16} weight="fill" className="shrink-0 text-emerald-700" />
+            <CheckCircle
+              size={16}
+              weight="fill"
+              className="shrink-0 text-emerald-700"
+            />
             <span>{notice}</span>
           </div>
           <button
@@ -1119,7 +1100,11 @@ export default function KnowledgeGraph() {
           className="flex items-center justify-between gap-2.5 rounded-xl border border-rose-300/70 bg-rose-500/15 px-4 py-3 text-xs font-semibold text-rose-900"
         >
           <div className="flex items-center gap-2">
-            <WarningCircle size={18} weight="fill" className="shrink-0 text-rose-700" />
+            <WarningCircle
+              size={18}
+              weight="fill"
+              className="shrink-0 text-rose-700"
+            />
             <span>{error}</span>
           </div>
           <button
@@ -1166,14 +1151,18 @@ export default function KnowledgeGraph() {
               <select
                 value={
                   overview.flagshipTargets.some(
-                    (t) => String(centerNode?.properties?.assetCode || "") === t.assetCode,
+                    (t) =>
+                      String(centerNode?.properties?.assetCode || "") ===
+                      t.assetCode,
                   )
                     ? String(centerNode?.properties?.assetCode || "")
                     : ""
                 }
                 onChange={(e) => {
                   if (e.target.value) {
-                    void loadTarget("asset", e.target.value, { recordHistory: true });
+                    void loadTarget("asset", e.target.value, {
+                      recordHistory: true,
+                    });
                   }
                 }}
                 aria-label="Quick focus priority infrastructure target"
@@ -1185,7 +1174,9 @@ export default function KnowledgeGraph() {
                 {overview.flagshipTargets.map((target: FlagshipTarget) => (
                   <option key={target.nodeKey} value={target.assetCode}>
                     {target.assetCode}
-                    {target.healthScore != null ? ` (${target.healthScore} ${target.healthGrade})` : ""}
+                    {target.healthScore != null
+                      ? ` (${target.healthScore} ${target.healthGrade})`
+                      : ""}
                     {target.city ? ` · ${target.city}` : ""}
                   </option>
                 ))}
@@ -1223,7 +1214,9 @@ export default function KnowledgeGraph() {
             </label>
             <select
               value={entityTypeFilter}
-              onChange={(e) => setEntityTypeFilter(e.target.value as "all" | GraphEntityType)}
+              onChange={(e) =>
+                setEntityTypeFilter(e.target.value as "all" | GraphEntityType)
+              }
               aria-label="Filter graph entities by type"
               className="glass-input px-3 py-2 text-xs font-semibold cursor-pointer"
             >
@@ -1273,7 +1266,12 @@ export default function KnowledgeGraph() {
                       includeInferred,
                     })
                     .then((res) =>
-                      applyInvestigationPayload("node", res.centerNode.nodeKey, res, false),
+                      applyInvestigationPayload(
+                        "node",
+                        res.centerNode.nodeKey,
+                        res,
+                        false,
+                      ),
                     )
                     .catch(() => {});
                 }
@@ -1305,22 +1303,28 @@ export default function KnowledgeGraph() {
                 includeInferred ? "bg-amber-500" : "bg-slate-400"
               }`}
             />
-            Show Inferred Non-Causal Links {includeInferred ? "(Enabled)" : "(Disabled)"}
+            Show Inferred Non-Causal Links{" "}
+            {includeInferred ? "(Enabled)" : "(Disabled)"}
           </button>
 
           {overview && overview.flagshipTargets.length > 0 && (
             <div className="flex flex-wrap items-center gap-1.5">
-              <span className="text-[11px] font-bold text-ink-soft mr-1">Priority Assets:</span>
+              <span className="text-[11px] font-bold text-ink-soft mr-1">
+                Priority Assets:
+              </span>
               {overview.flagshipTargets.map((target: FlagshipTarget) => {
                 const isActive =
                   centerNode?.nodeKey === target.nodeKey ||
-                  String(centerNode?.properties?.assetCode || "") === target.assetCode;
+                  String(centerNode?.properties?.assetCode || "") ===
+                    target.assetCode;
                 return (
                   <button
                     key={target.nodeKey}
                     type="button"
                     onClick={() =>
-                      void loadTarget("asset", target.assetCode, { recordHistory: true })
+                      void loadTarget("asset", target.assetCode, {
+                        recordHistory: true,
+                      })
                     }
                     className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-bold transition cursor-pointer ${
                       isActive
@@ -1381,8 +1385,9 @@ export default function KnowledgeGraph() {
                     ENTITY_THEME[centerNode.entityType]?.badgeCls || ""
                   }`}
                 >
-                  {ENTITY_THEME[centerNode.entityType]?.shortLabel || centerNode.entityType}:{" "}
-                  {truncateText(centerNode.label, 34)}
+                  {ENTITY_THEME[centerNode.entityType]?.shortLabel ||
+                    centerNode.entityType}
+                  : {truncateText(centerNode.label, 34)}
                 </span>
               )}
             </div>
@@ -1397,12 +1402,6 @@ export default function KnowledgeGraph() {
                 <span className="inline-block h-0 w-4 border-t-2 border-dashed border-amber-600" />
                 Inferred (Non-Causal)
               </span>
-              {pathResult?.found && (
-                <span className="inline-flex items-center gap-1 text-violet-700">
-                  <span className="inline-block h-1 w-4 rounded bg-violet-600" />
-                  Shortest Path
-                </span>
-              )}
             </div>
           </div>
 
@@ -1410,7 +1409,10 @@ export default function KnowledgeGraph() {
           <div className="relative min-h-[540px] w-full overflow-hidden rounded-2xl border border-white/80 bg-gradient-to-br from-slate-50/90 via-white/85 to-indigo-50/70 shadow-inner">
             {(loadingGraph || (loadingOverview && !centerNode)) && (
               <div className="absolute inset-0 z-20 flex items-center justify-center gap-2 bg-white/60 text-xs font-bold text-ink backdrop-blur-[2px]">
-                <ArrowsClockwise size={17} className="animate-spin text-primary" />
+                <ArrowsClockwise
+                  size={17}
+                  className="animate-spin text-primary"
+                />
                 Traversing civic graph neighborhood…
               </div>
             )}
@@ -1418,8 +1420,12 @@ export default function KnowledgeGraph() {
             {!centerNode && !loadingGraph && !loadingOverview ? (
               <div className="flex h-[540px] flex-col items-center justify-center gap-2 px-6 text-center text-xs text-ink-soft">
                 <ShareNetwork size={28} className="text-indigo-500" />
-                <p className="font-semibold text-ink">No graph nodes available for current filter.</p>
-                <p>Click “Rebuild Graph” or choose another jurisdiction above.</p>
+                <p className="font-semibold text-ink">
+                  No graph nodes available for current filter.
+                </p>
+                <p>
+                  Click “Rebuild Graph” or choose another jurisdiction above.
+                </p>
               </div>
             ) : (
               <svg
@@ -1451,27 +1457,16 @@ export default function KnowledgeGraph() {
                   >
                     <path d="M 0 1 L 8 5 L 0 9 z" fill="#d97706" />
                   </marker>
-                  <marker
-                    id="kg-arrow-path"
-                    viewBox="0 0 10 10"
-                    refX="8"
-                    refY="5"
-                    markerWidth="7"
-                    markerHeight="7"
-                    orient="auto-start-reverse"
-                  >
-                    <path d="M 0 1 L 8 5 L 0 9 z" fill="#7c3aed" />
-                  </marker>
                 </defs>
 
-                {/* Subtle Concentric Guide Rings */}
+                {/* Dotted Concentric Guide Rings */}
                 <circle
                   cx={CENTER_X}
                   cy={CENTER_Y}
                   r={162}
                   fill="none"
-                  stroke="#cbd5e1"
-                  strokeOpacity={0.5}
+                  stroke="#94a3b8"
+                  strokeOpacity={0.7}
                   strokeDasharray="4 6"
                 />
                 <circle
@@ -1479,8 +1474,8 @@ export default function KnowledgeGraph() {
                   cy={CENTER_Y}
                   r={262}
                   fill="none"
-                  stroke="#e2e8f0"
-                  strokeOpacity={0.75}
+                  stroke="#94a3b8"
+                  strokeOpacity={0.55}
                   strokeDasharray="3 6"
                 />
 
@@ -1501,30 +1496,30 @@ export default function KnowledgeGraph() {
                   const endX = tgt.x - ux * (tgt.radius + 6);
                   const endY = tgt.y - uy * (tgt.radius + 6);
 
-                  const isOnPath = highlightedEdgeIds.has(edge.id);
                   const isSelected = selectedEdge?.id === edge.id;
                   const isHovered = hoveredEdgeId === edge.id;
 
-                  const strokeColor = isOnPath
-                    ? "#7c3aed"
-                    : isSelected || isHovered
+                  const strokeColor =
+                    isSelected || isHovered
                       ? "#0f172a"
                       : edge.isInferred
                         ? "#d97706"
                         : "#94a3b8";
 
-                  const markerId = isOnPath
-                    ? "url(#kg-arrow-path)"
-                    : edge.isInferred
-                      ? "url(#kg-arrow-inferred)"
-                      : "url(#kg-arrow-factual)";
+                  const markerId = edge.isInferred
+                    ? "url(#kg-arrow-inferred)"
+                    : "url(#kg-arrow-factual)";
 
                   return (
                     <g
                       key={edge.id}
                       className="cursor-pointer"
                       onMouseEnter={() => setHoveredEdgeId(edge.id)}
-                      onMouseLeave={() => setHoveredEdgeId((prev) => (prev === edge.id ? null : prev))}
+                      onMouseLeave={() =>
+                        setHoveredEdgeId((prev) =>
+                          prev === edge.id ? null : prev,
+                        )
+                      }
                       onClick={() => {
                         setSelectedEdge(edge);
                       }}
@@ -1545,10 +1540,16 @@ export default function KnowledgeGraph() {
                         y2={endY}
                         stroke={strokeColor}
                         strokeWidth={
-                          isOnPath ? 3.2 : isSelected || isHovered ? 2.6 : edge.isInferred ? 2 : 1.4
+                          isSelected || isHovered
+                            ? 2.6
+                            : edge.isInferred
+                              ? 2
+                              : 1.4
                         }
                         strokeOpacity={
-                          isOnPath || isSelected || isHovered || edge.isInferred ? 0.92 : 0.65
+                          isSelected || isHovered || edge.isInferred
+                            ? 0.92
+                            : 0.65
                         }
                         strokeDasharray={edge.isInferred ? "6 4" : undefined}
                         markerEnd={markerId}
@@ -1559,10 +1560,11 @@ export default function KnowledgeGraph() {
 
                 {/* Nodes */}
                 {radial.positioned.map(({ node, x, y, ring, radius }) => {
-                  const theme = ENTITY_THEME[node.entityType] || ENTITY_THEME.COMPLAINT;
+                  const theme =
+                    ENTITY_THEME[node.entityType] || ENTITY_THEME.COMPLAINT;
                   const isCenter = ring === 0;
-                  const isPathNode = highlightedNodeIds.has(node.id);
-                  const isInspected = selectedInspectorNode?.id === node.id && !selectedEdge;
+                  const isInspected =
+                    selectedInspectorNode?.id === node.id && !selectedEdge;
                   const shortLabel = getShortNodeLabel(node);
                   const badgeScore =
                     node.entityType === "INFRASTRUCTURE_ASSET" &&
@@ -1577,12 +1579,12 @@ export default function KnowledgeGraph() {
                       className="cursor-pointer group"
                       onClick={() => focusEntityNode(node)}
                     >
-                      {(isCenter || isPathNode || isInspected) && (
+                      {(isCenter || isInspected) && (
                         <circle
                           r={radius + 6}
                           fill="none"
-                          stroke={isPathNode ? "#7c3aed" : theme.stroke}
-                          strokeWidth={isPathNode ? 2.5 : 2}
+                          stroke={theme.stroke}
+                          strokeWidth={2}
                           strokeOpacity={0.45}
                         />
                       )}
@@ -1603,7 +1605,10 @@ export default function KnowledgeGraph() {
                       >
                         {badgeScore
                           ? badgeScore
-                          : (ENTITY_THEME[node.entityType]?.shortLabel || "NODE")
+                          : (
+                              ENTITY_THEME[node.entityType]?.shortLabel ||
+                              "NODE"
+                            )
                               .slice(0, 3)
                               .toUpperCase()}
                       </text>
@@ -1618,7 +1623,7 @@ export default function KnowledgeGraph() {
                           rx={6}
                           fill="#ffffff"
                           fillOpacity={isCenter ? 0.97 : 0.9}
-                          stroke={isPathNode ? "#8b5cf6" : "#e2e8f0"}
+                          stroke="#e2e8f0"
                           strokeWidth={0.9}
                         />
                         <text
@@ -1635,13 +1640,14 @@ export default function KnowledgeGraph() {
                   );
                 })}
 
-                {/* Top Overlay Layer for Selected / Hovered / Path / Upstream Potential Edge Badges */}
+                {/* Top Overlay Layer for Selected / Hovered / Upstream Potential Edge Badges */}
                 {renderedEdges.map((edge) => {
-                  const isOnPath = highlightedEdgeIds.has(edge.id);
                   const isSelected = selectedEdge?.id === edge.id;
                   const isHovered = hoveredEdgeId === edge.id;
-                  const isPrimaryPotential = edge.relationType === "POTENTIALLY_IMPACTS";
-                  if (!isOnPath && !isSelected && !isHovered && !isPrimaryPotential) return null;
+                  const isPrimaryPotential =
+                    edge.relationType === "POTENTIALLY_IMPACTS";
+                  if (!isSelected && !isHovered && !isPrimaryPotential)
+                    return null;
 
                   const src = posMap.get(edge.sourceNodeId);
                   const tgt = posMap.get(edge.targetNodeId);
@@ -1656,7 +1662,10 @@ export default function KnowledgeGraph() {
                   const startY = src.y + uy * (src.radius + 3);
                   const endX = tgt.x - ux * (tgt.radius + 6);
                   const endY = tgt.y - uy * (tgt.radius + 6);
-                  const t = isPrimaryPotential && !isSelected && !isHovered ? 0.42 : 0.5;
+                  const t =
+                    isPrimaryPotential && !isSelected && !isHovered
+                      ? 0.42
+                      : 0.5;
                   const labelX = startX + (endX - startX) * t;
                   const labelY = startY + (endY - startY) * t;
                   const labelText = edge.isInferred
@@ -1675,8 +1684,8 @@ export default function KnowledgeGraph() {
                         width={112}
                         height={18}
                         rx={9}
-                        fill={isOnPath ? "#f3e8ff" : edge.isInferred ? "#fef3c7" : "#f1f5f9"}
-                        stroke={isOnPath ? "#a855f7" : edge.isInferred ? "#f59e0b" : "#94a3b8"}
+                        fill={edge.isInferred ? "#fef3c7" : "#f1f5f9"}
+                        stroke={edge.isInferred ? "#f59e0b" : "#94a3b8"}
                         strokeWidth={1}
                       />
                       <text
@@ -1684,7 +1693,7 @@ export default function KnowledgeGraph() {
                         dominantBaseline="central"
                         fontSize={8.5}
                         fontWeight={800}
-                        fill={isOnPath ? "#6b21a8" : edge.isInferred ? "#92400e" : "#1e293b"}
+                        fill={edge.isInferred ? "#92400e" : "#1e293b"}
                       >
                         {labelText}
                       </text>
@@ -1698,9 +1707,12 @@ export default function KnowledgeGraph() {
             {centerNode && (
               <div className="pointer-events-none absolute bottom-3 left-3 right-3 flex flex-wrap items-center justify-between gap-2">
                 <span className="rounded-full border border-white/80 bg-white/85 px-2.5 py-1 text-[10px] font-semibold text-ink-soft shadow-sm backdrop-blur-sm">
-                  Showing {radial.positioned.length} nodes &amp; {renderedEdges.length} edges
-                  {radial.hiddenCount > 0 ? ` (${radial.hiddenCount} more in list below)` : ""}
-                  {" · Click any node to pivot or any edge for provenance"}
+                  Showing {radial.positioned.length} nodes &amp;{" "}
+                  {renderedEdges.length} edges
+                  {radial.hiddenCount > 0
+                    ? ` (${radial.hiddenCount} more in list below)`
+                    : ""}
+                  {" · Click any node to pivot or inspect relationships"}
                 </span>
               </div>
             )}
@@ -1722,9 +1734,13 @@ export default function KnowledgeGraph() {
             ) : (
               <div className="flex max-h-40 flex-wrap gap-1.5 overflow-y-auto pr-1">
                 {navigatorNodes.map((n) => {
-                  const theme = ENTITY_THEME[n.entityType] || ENTITY_THEME.COMPLAINT;
+                  const theme =
+                    ENTITY_THEME[n.entityType] || ENTITY_THEME.COMPLAINT;
                   const active = centerNode?.nodeKey === n.nodeKey;
-                  const Icon = getEntityIcon(n.entityType, n.properties?.assetType);
+                  const Icon = getEntityIcon(
+                    n.entityType,
+                    n.properties?.assetType,
+                  );
                   return (
                     <button
                       key={n.nodeKey}
@@ -1736,7 +1752,11 @@ export default function KnowledgeGraph() {
                           : "border-white/80 bg-white/70 text-ink hover:bg-white"
                       }`}
                     >
-                      <Icon size={12} weight="duotone" className={active ? "text-white" : "text-primary"} />
+                      <Icon
+                        size={12}
+                        weight="duotone"
+                        className={active ? "text-white" : "text-primary"}
+                      />
                       <span
                         className={`rounded px-1 py-0.5 text-[9px] font-extrabold uppercase ${
                           active ? "bg-white/20 text-white" : theme.pillCls
@@ -1765,14 +1785,18 @@ export default function KnowledgeGraph() {
           </div>
         </div>
 
-        {/* RIGHT PANE: Investigation Summary, Potential Contributors, Evidence Chains, Path Tracer & Provenance */}
+        {/* RIGHT PANE: Investigation Summary, Potential Contributors & Evidence Chains */}
         <div className="flex flex-col gap-4">
           {/* 1. Investigation Summary Card */}
           <div className="glass-panel flex flex-col gap-3 p-5">
             <div className="flex items-start justify-between gap-2">
               <div className="min-w-0">
                 <span className="inline-flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider text-ink-soft">
-                  <LinkSimple size={13} weight="bold" className="text-primary" />
+                  <LinkSimple
+                    size={13}
+                    weight="bold"
+                    className="text-primary"
+                  />
                   Focused Investigation
                 </span>
                 <h2 className="mt-1 text-base font-extrabold leading-snug text-ink">
@@ -1819,7 +1843,10 @@ export default function KnowledgeGraph() {
                     to={
                       centerNode.entityType === "INFRASTRUCTURE_ASSET"
                         ? `/officer/copilot?assetCode=${encodeURIComponent(
-                            String(centerNode.properties?.assetCode || centerNode.label),
+                            String(
+                              centerNode.properties?.assetCode ||
+                                centerNode.label,
+                            ),
                           )}&q=${encodeURIComponent(
                             `Investigate ${String(centerNode.properties?.assetCode || centerNode.label)} and upstream non-causal contributors`,
                           )}`
@@ -1837,7 +1864,8 @@ export default function KnowledgeGraph() {
                 {centerNode.entityType === "INFRASTRUCTURE_ASSET" && (
                   <Link
                     to={`/officer/infrastructure-health?assetId=${encodeURIComponent(
-                      centerNode.externalId || String(centerNode.properties?.assetCode || ""),
+                      centerNode.externalId ||
+                        String(centerNode.properties?.assetCode || ""),
                     )}`}
                     className="inline-flex items-center gap-1 rounded-xl border border-emerald-200 bg-emerald-50/85 px-3 py-1.5 text-xs font-bold text-emerald-800 transition hover:bg-emerald-100"
                   >
@@ -1865,15 +1893,16 @@ export default function KnowledgeGraph() {
                     </Link>
                   )}
 
-                {centerNode.entityType === "COMPLAINT" && centerNode.externalId && (
-                  <Link
-                    to={`/officer/complaints/${encodeURIComponent(centerNode.externalId)}`}
-                    className="inline-flex items-center gap-1 rounded-xl border border-blue-200 bg-blue-50/85 px-3 py-1.5 text-xs font-bold text-primary transition hover:bg-blue-100"
-                  >
-                    Open Complaint Review
-                    <ArrowUpRight size={12} weight="bold" />
-                  </Link>
-                )}
+                {centerNode.entityType === "COMPLAINT" &&
+                  centerNode.externalId && (
+                    <Link
+                      to={`/officer/complaints/${encodeURIComponent(centerNode.externalId)}`}
+                      className="inline-flex items-center gap-1 rounded-xl border border-blue-200 bg-blue-50/85 px-3 py-1.5 text-xs font-bold text-primary transition hover:bg-blue-100"
+                    >
+                      Open Complaint Review
+                      <ArrowUpRight size={12} weight="bold" />
+                    </Link>
+                  )}
               </div>
             )}
           </div>
@@ -1883,9 +1912,14 @@ export default function KnowledgeGraph() {
             <div className="glass-panel flex flex-col gap-3 border border-amber-300/75 bg-amber-50/55 p-5">
               <div className="flex items-center justify-between gap-2">
                 <div className="flex items-center gap-2">
-                  <ShieldWarning size={16} weight="fill" className="text-amber-700" />
+                  <ShieldWarning
+                    size={16}
+                    weight="fill"
+                    className="text-amber-700"
+                  />
                   <h3 className="text-xs font-extrabold uppercase tracking-wider text-amber-950">
-                    Potential Contributing Infrastructure ({potentialAssets.length})
+                    Potential Contributing Infrastructure (
+                    {potentialAssets.length})
                   </h3>
                 </div>
                 <span className="rounded-full border border-amber-300 bg-amber-100 px-2 py-0.5 text-[10px] font-extrabold text-amber-900">
@@ -1907,25 +1941,37 @@ export default function KnowledgeGraph() {
                         <span className="font-bold text-ink">{pot.name}</span>
                       </div>
                       <span className="rounded-full bg-amber-500/15 px-2 py-0.5 font-mono text-[10px] font-extrabold text-amber-900">
-                        {pot.distanceMeters != null ? `${Math.round(pot.distanceMeters)}m away · ` : ""}
+                        {pot.distanceMeters != null
+                          ? `${Math.round(pot.distanceMeters)}m away · `
+                          : ""}
                         {Math.round(pot.confidence * 100)}% conf
                       </span>
                     </div>
 
                     {pot.evidence && (
-                      <p className="mt-1.5 leading-snug text-ink">{pot.evidence}</p>
+                      <p className="mt-1.5 leading-snug text-ink">
+                        {pot.evidence}
+                      </p>
                     )}
 
                     <div className="mt-2 flex flex-wrap items-center justify-between gap-2 border-t border-amber-100 pt-2">
                       <span className="text-[11px] font-semibold text-ink-soft">
                         Upstream open complaints:{" "}
-                        <strong className="font-mono text-ink">{pot.upstreamOpenComplaints}</strong>
-                        {pot.healthScore != null ? ` · Health ${pot.healthScore}/100` : ""}
+                        <strong className="font-mono text-ink">
+                          {pot.upstreamOpenComplaints}
+                        </strong>
+                        {pot.healthScore != null
+                          ? ` · Health ${pot.healthScore}/100`
+                          : ""}
                       </span>
 
                       <button
                         type="button"
-                        onClick={() => void loadTarget("asset", pot.assetCode, { recordHistory: true })}
+                        onClick={() =>
+                          void loadTarget("asset", pot.assetCode, {
+                            recordHistory: true,
+                          })
+                        }
                         className="inline-flex items-center gap-1 rounded-lg bg-amber-600 px-2.5 py-1 text-[11px] font-bold text-white hover:bg-amber-700 cursor-pointer"
                       >
                         Focus {pot.assetCode}
@@ -1947,12 +1993,18 @@ export default function KnowledgeGraph() {
             <div className="glass-panel flex flex-col gap-3 p-5">
               <div className="flex items-center justify-between gap-2">
                 <div className="flex items-center gap-2">
-                  <FlowArrow size={15} weight="bold" className="text-indigo-700" />
+                  <FlowArrow
+                    size={15}
+                    weight="bold"
+                    className="text-indigo-700"
+                  />
                   <h3 className="text-xs font-extrabold uppercase tracking-wider text-ink">
                     Evidence Chains ({evidenceChains.length})
                   </h3>
                 </div>
-                <span className="text-[11px] text-ink-soft">Click chain to expand steps</span>
+                <span className="text-[11px] text-ink-soft">
+                  Click chain to expand steps
+                </span>
               </div>
 
               <div className="flex flex-col gap-2">
@@ -1976,7 +2028,9 @@ export default function KnowledgeGraph() {
                       >
                         <div className="min-w-0 flex-1">
                           <div className="flex flex-wrap items-center gap-1.5">
-                            <span className="font-bold text-ink">{chain.title}</span>
+                            <span className="font-bold text-ink">
+                              {chain.title}
+                            </span>
                             <span
                               className={`rounded-full border px-2 py-0.5 text-[10px] font-bold ${
                                 chain.isInferred
@@ -1984,8 +2038,10 @@ export default function KnowledgeGraph() {
                                   : "border-emerald-300 bg-emerald-50 text-emerald-800"
                               }`}
                             >
-                              {chain.isInferred ? "Potential (Inferred)" : "Confirmed Fact"} ·{" "}
-                              {Math.round(chain.confidence * 100)}%
+                              {chain.isInferred
+                                ? "Potential (Inferred)"
+                                : "Confirmed Fact"}{" "}
+                              · {Math.round(chain.confidence * 100)}%
                             </span>
                           </div>
                         </div>
@@ -2002,7 +2058,10 @@ export default function KnowledgeGraph() {
                         <div className="border-t border-white/60 bg-white/50 px-3.5 py-3 text-xs">
                           <div className="flex flex-wrap items-center gap-1.5">
                             {chain.steps.map((step, idx) => (
-                              <div key={`${chain.id}-${step.nodeKey}-${idx}`} className="flex items-center gap-1.5">
+                              <div
+                                key={`${chain.id}-${step.nodeKey}-${idx}`}
+                                className="flex items-center gap-1.5"
+                              >
                                 <span
                                   className={`rounded-lg border px-2 py-1 text-[11px] font-bold ${
                                     ENTITY_THEME[step.entityType]?.pillCls ||
@@ -2013,21 +2072,32 @@ export default function KnowledgeGraph() {
                                 </span>
                                 {step.edgeLabelAfter && (
                                   <span
-                                    className={`rounded-full px-2 py-0.5 font-mono text-[10px] font-bold ${
+                                    className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[10px] font-semibold ${
                                       step.isInferred
                                         ? "border border-dashed border-amber-400 bg-amber-50 text-amber-900"
-                                        : "bg-slate-200/80 text-slate-700"
+                                        : "border border-slate-200/80 bg-slate-100 text-slate-700"
                                     }`}
                                   >
-                                    → {step.edgeLabelAfter}
-                                    {step.isInferred ? " ?" : ""} →
+                                    <span>
+                                      {formatRelationLabel(step.edgeLabelAfter)}
+                                    </span>
+                                    {step.isInferred && (
+                                      <span className="font-normal text-amber-700">
+                                        (Inferred)
+                                      </span>
+                                    )}
+                                    <span className="text-slate-400 font-bold select-none">
+                                      →
+                                    </span>
                                   </span>
                                 )}
                               </div>
                             ))}
                           </div>
                           {chain.summary && (
-                            <p className="mt-2 text-[11px] text-ink-soft">{chain.summary}</p>
+                            <p className="mt-2 text-[11px] text-ink-soft">
+                              {chain.summary}
+                            </p>
                           )}
                           {chain.disclaimer && (
                             <p className="mt-1 text-[10px] italic text-amber-900">
@@ -2040,182 +2110,6 @@ export default function KnowledgeGraph() {
                   );
                 })}
               </div>
-            </div>
-          )}
-
-          {/* 4. Shortest Path Tracer */}
-          <div className="glass-panel flex flex-col gap-3 p-5">
-            <div className="flex items-center justify-between gap-2">
-              <div className="flex items-center gap-2">
-                <Path size={15} weight="bold" className="text-violet-700" />
-                <h3 className="text-xs font-extrabold uppercase tracking-wider text-ink">
-                  Shortest Path Tracer (BFS)
-                </h3>
-              </div>
-              {pathResult && (
-                <button
-                  type="button"
-                  onClick={() => setPathResult(null)}
-                  className="text-[11px] font-bold text-ink-soft hover:text-ink cursor-pointer"
-                >
-                  Clear Path
-                </button>
-              )}
-            </div>
-
-            <div className="grid gap-2.5 sm:grid-cols-2">
-              <div className="flex flex-col gap-1">
-                <label htmlFor="kg-path-from" className="text-[11px] font-bold text-ink-soft">
-                  From Entity
-                </label>
-                <select
-                  id="kg-path-from"
-                  value={pathFrom}
-                  onChange={(e) => setPathFrom(e.target.value)}
-                  className="glass-input w-full py-1.5 px-2.5 text-xs font-medium"
-                >
-                  {selectablePathNodes.map((n) => (
-                    <option key={`from-${n.nodeKey}`} value={n.nodeKey}>
-                      [{ENTITY_THEME[n.entityType]?.shortLabel || n.entityType}] {n.label}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div className="flex flex-col gap-1">
-                <label htmlFor="kg-path-to" className="text-[11px] font-bold text-ink-soft">
-                  To Entity
-                </label>
-                <select
-                  id="kg-path-to"
-                  value={pathTo}
-                  onChange={(e) => setPathTo(e.target.value)}
-                  className="glass-input w-full py-1.5 px-2.5 text-xs font-medium"
-                >
-                  {selectablePathNodes.map((n) => (
-                    <option key={`to-${n.nodeKey}`} value={n.nodeKey}>
-                      [{ENTITY_THEME[n.entityType]?.shortLabel || n.entityType}] {n.label}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            </div>
-
-            <button
-              type="button"
-              onClick={() => void handleTracePath()}
-              disabled={tracingPath || !pathFrom || !pathTo}
-              className="inline-flex w-full items-center justify-center gap-1.5 rounded-xl bg-violet-600 px-3 py-2 text-xs font-bold text-white shadow-sm transition hover:bg-violet-700 disabled:opacity-60 cursor-pointer"
-            >
-              <Path size={14} weight="bold" />
-              {tracingPath ? "Tracing Path…" : "Find Shortest Path"}
-            </button>
-
-            {pathResult && (
-              <div className="rounded-2xl border border-violet-200/80 bg-violet-50/65 p-3.5 text-xs">
-                {pathResult.found ? (
-                  <>
-                    <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-                      <span className="font-extrabold text-violet-950">
-                        {pathResult.hopCount}-Hop Path Found
-                      </span>
-                      <span
-                        className={`rounded-full border px-2 py-0.5 text-[10px] font-bold ${
-                          pathResult.containsInferredEdge
-                            ? "border-amber-300 bg-amber-100 text-amber-900"
-                            : "border-emerald-300 bg-emerald-100 text-emerald-800"
-                        }`}
-                      >
-                        {pathResult.containsInferredEdge
-                          ? "Contains Inferred Link (Non-Causal)"
-                          : "Confirmed Records Only"}
-                      </span>
-                    </div>
-                    <ol className="space-y-1.5 text-[11px] text-ink">
-                      {pathResult.narrativeSteps.map((step, i) => (
-                        <li key={i} className="flex items-start gap-1.5">
-                          <span className="mt-0.5 inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-violet-600 text-[9px] font-bold text-white">
-                            {i + 1}
-                          </span>
-                          <span>{step}</span>
-                        </li>
-                      ))}
-                    </ol>
-                  </>
-                ) : (
-                  <p className="font-medium text-ink-soft">
-                    No connecting path found within 5 hops under the current “Show Inferred Links” setting.
-                  </p>
-                )}
-              </div>
-            )}
-          </div>
-
-          {/* 5. Provenance Metadata Inspector */}
-          {activeProvenance && (
-            <div className="glass-panel flex flex-col gap-2.5 p-5 text-xs">
-              <div className="flex items-center justify-between gap-2">
-                <div className="flex items-center gap-2">
-                  <Info size={15} weight="duotone" className="text-primary" />
-                  <h3 className="text-xs font-extrabold uppercase tracking-wider text-ink">
-                    Provenance Inspector
-                  </h3>
-                </div>
-                <span
-                  className={`rounded-full border px-2 py-0.5 text-[10px] font-bold ${
-                    activeProvenance.isInferred
-                      ? "border-amber-300 bg-amber-50 text-amber-900"
-                      : "border-emerald-300 bg-emerald-50 text-emerald-800"
-                  }`}
-                >
-                  {activeProvenance.isInferred ? "Inferred · Non-Causal" : "Confirmed Record"} ·{" "}
-                  {Math.round(Number(activeProvenance.confidence ?? 1) * 100)}%
-                </span>
-              </div>
-
-              <p className="font-bold text-ink">{activeProvenance.title}</p>
-              {activeProvenance.evidence && (
-                <p className="rounded-xl border border-white/75 bg-white/60 px-3 py-2 text-[11px] text-ink">
-                  {activeProvenance.evidence}
-                </p>
-              )}
-
-              <div className="grid grid-cols-2 gap-2 text-[11px]">
-                <div className="rounded-xl border border-white/70 bg-white/55 px-2.5 py-2">
-                  <span className="block text-[10px] font-bold uppercase text-ink-soft">
-                    Source Table
-                  </span>
-                  <span className="font-mono font-semibold text-ink">
-                    {activeProvenance.provenance?.sourceTable || "derived"}
-                  </span>
-                </div>
-                <div className="rounded-xl border border-white/70 bg-white/55 px-2.5 py-2">
-                  <span className="block text-[10px] font-bold uppercase text-ink-soft">
-                    Generator Model
-                  </span>
-                  <span className="font-mono font-semibold text-ink">
-                    {activeProvenance.provenance?.model || "civicpulse-kg-builder"} v
-                    {activeProvenance.provenance?.version || "1.0.0"}
-                  </span>
-                </div>
-                <div className="col-span-2 rounded-xl border border-white/70 bg-white/55 px-2.5 py-2">
-                  <span className="block text-[10px] font-bold uppercase text-ink-soft">
-                    Source Record IDs &amp; Generated At
-                  </span>
-                  <span className="block truncate font-mono text-[10px] text-ink">
-                    {(activeProvenance.provenance?.sourceRecordIds || []).join(", ") || "—"}
-                  </span>
-                  <span className="text-[10px] text-ink-soft">
-                    Generated: {formatDateTime(activeProvenance.provenance?.generatedAt)}
-                  </span>
-                </div>
-              </div>
-
-              {activeProvenance.provenance?.disclaimer && (
-                <p className="rounded-xl border border-amber-200 bg-amber-50/80 px-3 py-2 text-[11px] font-medium text-amber-950">
-                  {activeProvenance.provenance.disclaimer}
-                </p>
-              )}
             </div>
           )}
         </div>
